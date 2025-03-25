@@ -1,0 +1,236 @@
+function [rGamma, rAlpha, rBeta, JumpPost] = m20140624_ForwardBackwardBayes_MarkovJump_fn(s, pJ, pgrid, Alpha0, tMax)
+% Forward-Backward algorithm to solve a Hidden Markov Model, in which the 
+% hidden states are Bernoulli parameters controlling the observed outcome s.
+%
+% Adapted from m20140624_ForwardBackwardBayes_MarkovJump_fn to make the
+% computation for each time step and saving time (instead of calling the
+% function several times).
+%
+% Input:
+%      s: sequence of numeric values (including 1s and 2s)
+%     pJ: prior on jump occurence at any given location
+%  pgrid: grid for transition probabilities. pgrid(i) is p(s(i)=1 | x_1(i), s(i-1)=1)
+% Alpha0: prior of states, i.e. on transition proba (pAgB varies over rows 
+%         & pBgA varies over columns)
+%
+% Output:
+%   rAlpha: rAlpha(:,t) is the posterior distribution for states x(t) 
+%           (i.e. hidden transition probabilities) given observation s(1:t)
+%    rBeta: rBeta(:,t) is the posterior distribution for states x(t) 
+%           (i.e. hidden transition probabilities) given observation s(t+1:N)
+%   rGamma: rGamma(:,t) is the posterior distribution for states x(t) 
+%           (i.e. hidden transition probabilities) given observation s(1:N)
+% JumpPost: Posterior on jump probability given s(1:N).
+
+seqL   = length(s);
+n      = length(pgrid);
+pgrid  = sort(pgrid(:))';   % make sure that pgrid is a row vector in ascending order
+Alpha0 = Alpha0(:);         % make sure that Alpha0 is a column vector
+
+% FORWARD PASS: p(x1(i),x2(i) | s(1:i))
+% =====================================
+
+% Alpha(i,t) = p(x1(i),x2(i) | s(1:t))
+% Actually, because we want the to distinguish jump vs. no jump. we split 
+% the values of Alpha in 2 columns, corresponding to jump or no jump. 
+
+% Initialize alpha of the forward algorithm
+% Couples of x1 x2 are sorted into a column
+% Estimated transition (i,j) = (p_AgB(i), p_BgA(j))
+Alpha = zeros(n*n, 2, seqL);
+
+% get the matrix of non diagonal elements
+NonDiag_nn = ones(n*n);
+NonDiag_nn(logical(eye(n*n))) = 0;
+
+% Compute alpha iteratively (forward pass)
+for k = 2:seqL;    
+    
+    % Specify likelihood of current observation
+    % LL(i, j) = p(y | tAgB(i), tBgA(j))
+    LL = zeros(n, n);
+    if      s(k-1) == 1 && s(k) == 2     
+        LL = repmat(pgrid, [n, 1]);     % B|A
+    elseif  s(k-1) == 1 && s(k) == 1    
+        LL = repmat(1-pgrid, [n, 1]);   % A|A
+    elseif  s(k-1) == 2 && s(k) == 1    
+        LL = repmat(pgrid', [1, n]);    % A|B
+    elseif  s(k-1) == 2 && s(k) == 2    
+        LL = repmat(1-pgrid', [1, n]);  % B|B
+    end
+    
+    % Normalize LL so that it is a probability over the possible transition
+    % values considered.
+    LL = LL / sum(LL(:));
+    
+    % Sort LL as a column
+    LL = LL(:);
+    
+    % Compute the new alpha, based on the former alpha, the prior on
+    % transition between states and the likelihood. See for instance
+    % Wikipedia entry for 'Forward algorithm'. 
+    if k == 2        
+        Alpha(:,1, k) = (1-pJ)   * LL .* Alpha0;
+        Alpha(:,2, k) = pJ/(n-1) * LL .* Alpha0;
+    else
+        
+        % No Jump at k: 
+        % - take the prior on 'no jump': (1-pJ)
+        % - take the current observation likelihood under x_i (LL)
+        % - take the posterior on x_i(t-1) (summed over whether there was a
+        % jump of not at t-1)
+        Alpha(:,1,k) = (1-pJ) * LL .* (...
+            (Alpha(:,1,k-1) + Alpha(:,2,k-1)));
+        
+        % Jump at k:
+        % - take the prior on 'no jump': (1-pJ)
+        % - take the current observation likelihood under x_i (LL)
+        % - take the posterior on all the other state, excluding x_i(t-1) 
+        % (summed over whether there was a jump or not at i-1)
+        Alpha(:,2,k) = pJ * LL .* (...
+            (1/(n*n-1)) * NonDiag_nn * (Alpha(:,1,k-1) + Alpha(:,2,k-1)));
+        
+    end
+    
+    % scale alpha as a posterior (which we will do eventually) to avoid
+    % numeric overflow
+    NormalizationCst = sum(sum(Alpha(:,:,k),2),1);
+    Alpha(:,1, k) = Alpha(:,1,k) / NormalizationCst;
+    Alpha(:,2, k) = Alpha(:,2,k) / NormalizationCst;
+end
+
+% BACKWARD PASS: p(y(i+1:N | x(i))
+% ================================
+
+% COMPUTE VARYING THE MAXIMAL NUMBER OF ITEMS TAKEN
+
+% Beta(i,t) = p(s(t+1:N) | x(t))
+% Actually, we compute p(x(t) | s(t+1:N)) because what we want in the end
+% is a distribution over x, and the scaling of the distribution does not 
+% matter
+% In addition, because we want the to distinguish jump vs. no jump. we split 
+% the values of Alpha in 2 columns, corresponding to jump or no jump. 
+
+% Specify likelihood of pA and pB, depending on the transition 
+% probabilities. 
+% pA & pB are pAgB (change of rows) X pBgA (change of columns)
+pAgB = repmat(pgrid', [1 n]);
+pBgA = repmat(pgrid, [n 1]);
+
+pA = pAgB ./ (pAgB+pBgA);
+pB = 1-pA;
+
+% force these two to be 0.5 (not nan) to allow futher computations
+pA(1,1) = 0.5;
+pB(1,1) = 0.5;
+
+% set the maximum number of iteration
+if tMax < 2
+    tMax = 2;
+end
+
+% Initialize beta of the forward algorithm
+% Couples of x1 x2 are sorted into a column
+% Estimated transition (i,j) = (p_AgB(i), p_BgA(j))
+AllBeta = cell(1, seqL-tMax+1);
+
+% Compute beta iteratively (backward pass)
+for tEnd = tMax:seqL
+    Beta = zeros(n*n, 2, seqL-tEnd);
+    for k = tEnd:-1:tMax;
+        
+        if k == tEnd
+            Beta(:,1,k) = 1;
+            Beta(:,2,k) = 1;
+        else
+            % Specify likelihood p(y(k)|x(k),y(k+1))
+            % LL = p(y(k+1)|x(k),y(k)) * p(y(k)|x(k)) / p(y(k+1)|x(k))
+            % LL = A1*A2/A3
+            
+            % A1 = p(y(k+1)|x(k),y(k))
+            if      s(k) == 1 && s(k+1) == 1           % A|A
+                A1 = repmat(1-pgrid, [n, 1]);
+            elseif  s(k) == 2 && s(k+1) == 1           % A|B
+                A1 = repmat(pgrid', [1, n]);
+            elseif  s(k) == 1 && s(k+1) == 2           % B|A
+                A1 = repmat(pgrid, [n, 1]);
+            elseif  s(k) == 2 && s(k+1) == 2           % B|B
+                A1 = repmat(1-pgrid', [1, n]);
+            end
+            
+            % A2 = p(y(k)|x(k))
+            if s(k) == 1
+                A2 = pA;
+            else
+                A2 = pB;
+            end
+            
+            % A3 = p(y(k+1)|x(k))
+            if s(k+1) == 1
+                A3 = (1-pJ)*pA + ...
+                    (pJ/(n*n-1))*(sum(pA(:)) - pA);
+            else
+                A3 = (1-pJ)*pB + ...
+                    (pJ/(n*n-1))*(sum(pB(:)) - pB);
+            end
+            
+            LL = A1 .* A2 ./ A3;
+            
+            % No Jump from k to k+1
+            % Average over potential observations of s(i-1)
+            % take only diagonal elements
+            Beta(:,1, k) = (1-pJ) * LL(:) .* (...
+                (Beta(:,1,k+1) + Beta(:,2,k+1)) + ...  % if s(i-1) == 1
+                (Beta(:,1,k+1) + Beta(:,2,k+1)) );     % if s(i-1) == 2
+            
+            % Jump from k to k+1
+            % Average over potential observations of s(i-1)
+            % sum over non diagonal elements
+            Beta(:,2, k) = pJ * LL(:) .* (...
+                ( (1/(n*n-1)) * NonDiag_nn * ((Beta(:,1,k+1) + Beta(:,2,k+1)))));     % if s(i-1) == 2
+            
+        end
+        
+        % scale beta to sum = 1. This normalization is only for convinience,
+        % since we don't need this scaling factor in the end.
+        NormalizationCst = nansum(nansum(Beta(:,:,k),2),1);
+        Beta(:,1, k) = Beta(:,1,k) / NormalizationCst;
+        Beta(:,2, k) = Beta(:,2,k) / NormalizationCst;
+    end
+    AllBeta{tEnd-tMax+1} = Beta;
+end
+
+
+% COMBINE FORWARD AND BACKWARD PASS
+% =================================
+% COMPUTE VARYING THE MAXIMAL NUMBER OF ITEMS TAKEN
+rGamma = cell(1, seqL-tMax+1);
+rBeta = cell(1, seqL-tMax+1);
+JumpPost = cell(1, seqL-tMax+1);
+for tEnd = tMax:seqL
+    % p(x(i) | y(1:N)) ~ p(y(i+1:N) | x(i)) p(x(i) | y(1:i))
+    Gamma = Alpha(:, :, 1:tEnd) .* AllBeta{tEnd-tMax+1};
+    
+    % Scale gamma as a posterior over observations
+    cst = repmat(sum(sum(Gamma, 2), 1), [n*n, 2, 1]);
+    Gamma = Gamma ./ cst;
+    
+    % Compute the posterior on states, summed over jump or no jump
+    sGamma = squeeze(sum(Gamma, 2));
+    rGamma{tEnd-tMax+1} = reshape(sGamma, [n, n, tEnd]);
+    
+    % Compute the forward & backword posterior
+    sBeta  = squeeze(sum(AllBeta{tEnd-tMax+1}, 2));
+    rBeta{tEnd-tMax+1}  = reshape(sBeta, [n, n, tEnd]);
+        
+    % Compute the posterior on jump, summed over the states
+    tmp = squeeze(sum(Gamma, 1));
+    JumpPost{tEnd-tMax+1} = squeeze(tmp(2,:));
+end
+
+sAlpha = squeeze(sum(Alpha, 2));
+rAlpha{tEnd-tMax+1} = reshape(sAlpha, [n, n, seqL]);
+    
+
+
+
