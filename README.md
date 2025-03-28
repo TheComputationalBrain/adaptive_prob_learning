@@ -19,6 +19,6 @@ The models folder contains code to implement models described in the manuscript.
 - Hierarchical Gaussian Filters (Mathys et al., 2011, 2014)
 - Proportional–integral–derivative controller (Ritz et al., 2018)
 
-The figures folder contains figures in the paper and all the figures can be genenerate using the plots script. 
+The figures folder contains figures in the paper and all the figures can be genenerate using the *plots.py* script. 
 
-The analysis script contains code we used to generate the results, including optimisation of parameters, cross-validation and model recovery. Running the script will take times, therefore the results is already included in the results folder. 
+The *analysis.py* script contains code we used to generate the results, including optimisation of parameters, cross-validation and model recovery. Running the script will take times, therefore the results is already included in the results folder. 
