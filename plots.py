@@ -42,24 +42,19 @@ import gc
 
 from scipy import stats
 
-#%%
+
+#%% load data
 
 G_dat = da.load_data("Gallistel")
 Khaw_dat = da.load_data("Khaw")
 FM_dat = da.load_data("FM")
 
 
-G_subj_n = 10
-G_all_sess = list(range(10))
+G_subj_n = len(G_dat["sub_est"])
 
-K_subj_n = 11
-K_all_sess = list(range(10))
+K_subj_n = len(Khaw_dat["sub_est"])
 
-FM_subj_n = 96
-FM_all_sess = list(range(15))
-
-
-
+FM_subj_n = len(FM_dat["sub_est"])
 
 
 
@@ -2409,6 +2404,10 @@ ax1.set_xticklabels(custom_x_labels, rotation=45, ha="right",fontsize=14)
 plt.tight_layout()
 plt.savefig("figures/Figure6.png", dpi=300, bbox_inches='tight')
 plt.show()
+
+
+
+#%% Figure S2
 
 
        
