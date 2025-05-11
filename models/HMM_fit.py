@@ -119,6 +119,73 @@ def HMM(p_c,data,expID):
 
 
 
+def HMM_trial(p_c,data,expID):
+    
+    if expID == 1:
+        
+       
+        n_trials_per_session = 1000
+        
+        resol = 20
+        p_c = p_c
+        p1_min = 0
+        p1_max = 1
+        do_inference_on_current_trial = True
 
+
+        options = {
+                'resol': resol,
+                'p_c': p_c,
+                'p1_min': p1_min,
+                'p1_max': p1_max,
+                'do_inference_on_current_trial': do_inference_on_current_trial,
+            }
+
+    
+    elif expID == 2:
+        n_trials_per_session = 999
+        
+        resol = 20
+        p_c =  p_c
+        p1_min = 0
+        p1_max = 1
+        do_inference_on_current_trial = True
+
+
+        options = {
+                'resol': resol,
+                'p_c': p_c,
+                'p1_min': p1_min,
+                'p1_max': p1_max,
+                'do_inference_on_current_trial': do_inference_on_current_trial,
+            }
+        
+    elif expID == 3:
+        n_trials_per_session = 75
+        
+        resol = 20
+        p_c =  p_c
+        p1_min = 0.1
+        p1_max = 0.9
+        do_inference_on_current_trial = True
+
+
+        options = {
+                'resol': resol,
+                'p_c': p_c,
+                'p1_min': p1_min,
+                'p1_max': p1_max,
+                'do_inference_on_current_trial': do_inference_on_current_trial,
+            }
+        
+        
+    inference_out = IO.run_inference(data, options=options)
+    mod_est = inference_out[1,]['mean']
+    
+    
+    predicted_response = mod_est
+    
+    
+    return predicted_response
 
 
