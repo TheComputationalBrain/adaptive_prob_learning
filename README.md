@@ -21,4 +21,4 @@ The models folder contains code to implement models described in the manuscript.
 
 The figures folder contains figures in the paper and all the figures can be genenerate using the *plots.py* script. 
 
-The *analysis.py* script contains code we used to generate the results, including optimisation of parameters, cross-validation, models/pararmeters recovery. Running this script will take times, therefore the results is already included in the results folder. 
+The *analysis.py* script contains code we used to generate the results, including optimisation of parameters, cross-validation, models/parameters recovery. Running this script will take times, therefore the results is already included in the results folder. 
