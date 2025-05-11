@@ -41,7 +41,7 @@ import matplotlib.gridspec as gridspec
 import gc
 
 from scipy import stats
-
+import scipy.stats as sps
 
 #%% load data
 
@@ -51,10 +51,15 @@ FM_dat = da.load_data("FM")
 
 
 G_subj_n = len(G_dat["sub_est"])
+G_all_sess = list(range(len(G_dat["sub_est"][0])))
 
 K_subj_n = len(Khaw_dat["sub_est"])
+K_all_sess = list(range(len(Khaw_dat["sub_est"][0])))
 
 FM_subj_n = len(FM_dat["sub_est"])
+FM_all_sess = list(range(len(FM_dat["sub_est"][0])))
+
+
 
 
 
@@ -2410,4 +2415,1160 @@ plt.show()
 #%% Figure S2
 
 
-       
+
+def load_all_result_dicts(models, folder="results/para_recovery"):
+    all_results = {}
+
+    for model in models:
+        try:
+            in_path = os.path.join(folder, f"{model}_in.csv")
+            out_path = os.path.join(folder, f"{model}_out.csv")
+
+            result_dict = {
+                "in": pd.read_csv(in_path),
+                "out": pd.read_csv(out_path)
+            }
+
+            all_results[model] = result_dict
+        except FileNotFoundError:
+            print(f"Files for model '{model}' not found. Skipping.")
+    
+    
+    return all_results
+
+
+
+models = [
+    "changepoint", "HMM", "delta_rule", "p_hall", "reduced_bayes",
+    "reduced_bayes_lamda", "PID", "Mixed_delta", "VKF", "HGF"
+]
+
+all_result_dicts = load_all_result_dicts(models)
+
+
+
+def get_confusion_matrix(result_dict, corr_type="pearson"):
+    """ corr_type can be 'pearson' or 'spearman' """
+    
+    invals = result_dict["in"]
+    outvals = result_dict["out"]
+    
+    confmat = pd.DataFrame(columns=invals.columns, index=outvals.columns, 
+                           dtype=float)
+    confmat_pval = pd.DataFrame(columns=invals.columns, index=outvals.columns, 
+                                dtype=float)
+    for i in invals.columns:
+        for o in outvals.columns:
+            if corr_type == "pearson":
+                confmat.loc[o, i], confmat_pval.loc[o, i] = sps.pearsonr(
+                    invals[i], outvals[o])
+            elif corr_type == "spearman":
+                confmat.loc[o, i], confmat_pval.loc[o, i] = sps.spearmanr(
+                    invals[i], outvals[o])
+    
+    return {"conf_matrix": confmat, "pvalues": confmat_pval, "type": corr_type}
+
+
+
+
+def plot_confusoin_matrix(result_dict, model, ax, x_labels=None, y_labels=None):
+    # Get confusion matrix and p-values
+    conf_matrices = get_confusion_matrix(result_dict, corr_type="spearman")
+    conf_mat = conf_matrices["conf_matrix"]
+    pmat = conf_matrices["pvalues"]
+
+    nrec, ngen = conf_mat.shape
+    recnames = y_labels if y_labels is not None else conf_mat.index
+    gennames = x_labels if x_labels is not None else conf_mat.columns
+
+    xlabel = "Generative parameters"
+    ylabel = "Recovered parameters"
+    p_crit = 0.05
+    cell_fontsize = 8
+    labels_fontsize = 8
+    cmap = "coolwarm"
+
+    x = np.arange(ngen) + 0.5
+    y = np.arange(nrec) + 0.5
+
+    # Plot heatmap
+    im = ax.imshow(conf_mat, cmap=cmap, extent=[0, ngen, 0, nrec],
+                   aspect=0.9, vmin=-1, vmax=1, interpolation='nearest')
+
+    ax.set_xticks(x)
+    ax.set_yticks(y)
+    ax.set_xticklabels(gennames, rotation=0, ha='center', fontsize=labels_fontsize)
+    ax.set_yticklabels(np.flip(recnames), fontsize=labels_fontsize)
+
+    ax.set_title(model)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+
+    labels = np.ones((nrec, ngen)).astype(str)
+
+    for ip1, p1 in enumerate(conf_mat.index):
+        for ip2, p2 in enumerate(conf_mat.columns):    
+            p_val = pmat.loc[p1, p2]
+            stars = (
+                "***" if p_val <= .001 else
+                "**" if p_val <= .01 else
+                "*" if p_val < p_crit else
+                ""
+            )
+            labels[ip1, ip2] = f"{conf_mat.loc[p1, p2]:0.2f}\n{stars}"
+
+    for (j, i), label in np.ndenumerate(np.flipud(labels)):
+        value = np.flipud(conf_mat)[j, i]
+        color = (1, 1, 1) if abs(value) > 0.25 else (0, 0, 0)
+        ax.text(i + 0.5, j + 0.5, label, ha='center', va='center', 
+                fontsize=cell_fontsize, c=color)
+
+    return im, conf_matrices   
+
+
+
+fig, axes = plt.subplots(2, 5, figsize=(21, 9))
+axes = axes.flatten()
+
+
+custom_titles = {
+    "HMM": "HMM",
+    "HGF": "HGF",
+    "VKF": "VKF",
+    "Mixed_delta": "Mixture of delta rules",
+    "reduced_bayes": "Reduced Bayesian model",
+    "reduced_bayes_lamda": "Reduced Bayesian model\n(under-weighted likelihood)",
+    "changepoint": "Change Point model",
+    "PID": "PID",
+    "p_hall": "Pearce-Hall model",
+    "delta_rule": "Delta rule"
+}
+
+
+
+models = [
+    ("HMM", [r"$h$"], [r"$h$"]),
+    ("HGF", [r"$\vartheta$", "K", r"$\omega$"], [r"$\vartheta$", "K", r"$\omega$"]),
+    ("VKF", [r"$\lambda$", r"$\omega$", "v0"], [r"$\lambda$", r"$\omega$", "v0"]),
+    ("Mixed_delta", [r"$l_1$", r"$l_2$", r"$h$", r"$v_p$"], [r"$l_1$", r"$l_2$", r"$h$", r"$v_p$"]),
+    ("reduced_bayes", [r"$h$"], [r"$h$"]),
+    ("reduced_bayes_lamda", [r"$h$", r"$\lambda$"], [r"$h$", r"$\lambda$"]),
+    ("changepoint", [r"$T1$", r"$T2$"], [r"$T1$", r"$T2$"]),
+    ("PID", [r"$K_P$", r"$K_I$", r"$K_D$", r"$\lambda$"], [r"$K_P$", r"$K_I$", r"$K_D$", r"$\lambda$"]),
+    ("p_hall", [r'$\alpha$', r'$\eta$'], [r'$\alpha$', r'$\eta$']),
+    ("delta_rule", [r'$\alpha$'], [r'$\alpha$'])
+]
+
+# Collect image objects
+images = []
+
+for i, (model, x_labels, y_labels) in enumerate(models):
+    im,conf_matrices = plot_confusoin_matrix(
+        result_dict=all_result_dicts[model],
+        model=model,
+        ax=axes[i],
+        x_labels=x_labels,
+        y_labels=y_labels
+    )
+    
+    for key, df in list(conf_matrices.items())[:-1]:
+        df.to_csv(f"results/para_recovery/{model}_{key}.csv", index=False)
+        
+    # Set the custom title for each subplot
+    axes[i].set_title(custom_titles[model])
+    images.append(im)
+
+
+# Adjust subplot spacing to leave room for the colorbar and reduce vertical space between rows
+fig.subplots_adjust(right=0.88, hspace=0.01)  # Reduce the vertical space # shrink plot area to make space on the right
+
+# Add a single colorbar on the far right
+cbar_ax = fig.add_axes([0.90, 0.15, 0.015, 0.7])  # [left, bottom, width, height]
+
+cbar = fig.colorbar(images[0], cax=cbar_ax)
+
+# Set colorbar ticks to only -1 and 1
+cbar.set_ticks([-1, 1])
+cbar.set_ticklabels(['-1', '1'])
+
+cbar.set_label("Spearman's r")
+
+plt.savefig("figures/FigureS2.png", dpi=300, bbox_inches='tight')
+plt.show()
+
+#%% Figure S3
+
+#### get subjects lr
+
+G_dat['lr_clip'] = []
+Khaw_dat['lr_clip'] = []
+FM_dat['lr_clip'] = []
+
+
+for subji in range(G_subj_n):  
+    
+    subj_lr = []
+    
+    for sessi in range(len(G_all_sess)):
+        
+        outcome = G_dat["outcome"][subji][sessi]
+        sub_est = G_dat["sub_est"][subji][sessi]
+        
+        lr = da.learning_rate_clip(outcome,sub_est)
+        
+        subj_lr.append(lr)
+        
+    G_dat['lr_clip'].append(np.array(subj_lr))
+    
+        
+for subji in range(K_subj_n):  
+    
+    subj_lr = []
+    
+    for sessi in range(len(K_all_sess)):
+        
+        outcome = Khaw_dat["outcome"][subji][sessi]
+        sub_est = Khaw_dat["sub_est"][subji][sessi]
+        
+        lr = da.learning_rate_clip(outcome,sub_est)
+        
+        subj_lr.append(lr)
+        
+    Khaw_dat['lr_clip'].append(np.array(subj_lr))
+        
+        
+for subji in range(FM_subj_n):  
+    
+    subj_lr = []
+    
+    for sessi in range(len(FM_all_sess)):
+        
+        outcome = FM_dat["outcome"][subji][sessi]
+        sub_est = FM_dat["sub_est"][subji][sessi]
+        
+        lr = da.learning_rate_clip(outcome,sub_est)
+        
+        subj_lr.append(lr)
+        
+    FM_dat['lr_clip'].append(np.array(subj_lr))
+
+
+#### get models lr 
+
+mod_names = ["HMM", "changepoint", "delta_rule", "p_hall", "reduced_bayes",
+             "reduced_bayes_lamda", "PID", "Mixed_delta", "VKF", "HGF"]
+
+
+G_dat['mod_lr_clip'] = {}
+Khaw_dat['mod_lr_clip'] = {}
+FM_dat['mod_lr_clip'] = {}
+
+
+# Loop through subjects and apply models
+for key in mod_names:
+    G_dat['mod_lr_clip'][key] = []
+    Khaw_dat['mod_lr_clip'][key] = []
+    FM_dat['mod_lr_clip'][key] = []
+    
+    for subji in range(G_subj_n):  
+        
+        subj_mod_lr = []
+        
+        for sessi in range(len(G_all_sess)):
+            
+            outcome = G_dat["outcome"][subji][sessi]
+            mod_est = G_dat["mod_est"][key][subji][sessi]
+            
+            lr = da.learning_rate_clip(outcome,mod_est)
+            
+            subj_mod_lr.append(lr)
+            
+        G_dat['mod_lr_clip'][key].append(np.array(subj_mod_lr))
+
+    for subji in range(K_subj_n):  
+        
+        subj_mod_lr = []
+        
+        for sessi in range(len(K_all_sess)):
+            
+            outcome = Khaw_dat["outcome"][subji][sessi]
+            mod_est = Khaw_dat["mod_est"][key][subji][sessi]
+            
+            lr = da.learning_rate_clip(outcome,mod_est)
+            
+            subj_mod_lr.append(lr)
+            
+        Khaw_dat['mod_lr_clip'][key].append(np.array(subj_mod_lr))
+        
+            
+    for subji in range(FM_subj_n):  
+        
+        subj_mod_lr = []
+        
+        for sessi in range(len(FM_all_sess)):
+            
+            outcome = FM_dat["outcome"][subji][sessi]
+            mod_est = FM_dat["mod_est"][key][subji][sessi]
+            
+            lr = da.learning_rate_clip(outcome,mod_est)
+            
+            subj_mod_lr.append(lr)
+            
+        FM_dat['mod_lr_clip'][key].append(np.array(subj_mod_lr))
+    
+
+
+#### extract lr sequences
+
+FM_dat["CPseq_lr_clip"] = []
+
+# Define the range around change points (-2 before, +15 after)
+pre_cp = 5
+post_cp = 15
+
+
+# Loop through subjects
+for subji in range(len(FM_dat["CP"])):  
+    cp_sequences = []  # Store sequences for this subject
+    
+    # Loop through sessions
+    for sessi in range(len(FM_dat["outcome"][0])): 
+        cp_indices = np.where(FM_dat["CP"][subji][sessi] == 1)[0]  # Find CP indices
+        lr_sess = FM_dat["lr_clip"][subji][sessi]  # Get learning rate sequence
+        
+        for i, cp in enumerate(cp_indices):  # Loop through each change point
+            start_idx = cp - pre_cp
+            end_idx = cp + post_cp + 1  # Exclusive index
+
+            # Exclude sequence if out of trial bounds
+            if start_idx < 0 or end_idx > len(FM_dat["outcome"][0][1]):
+                continue
+
+            # Exclude sequence if another CP occurs within 15 trials
+            if i < len(cp_indices) - 1:  # Check if there's a next change point
+                next_cp = cp_indices[i + 1]
+                if next_cp < end_idx:  # Another CP is too close
+                    continue
+
+            # Extract and store valid sequence
+            seq = lr_sess[start_idx:end_idx]
+            cp_sequences.append(seq)
+
+    FM_dat["CPseq_lr_clip"].append(np.array(cp_sequences))  # Convert to NumPy array and store
+
+
+FM_dat['CPseq_mod_lr_clip'] = {}
+
+for key in mod_names:
+    
+    FM_dat['CPseq_mod_lr_clip'][key] = []
+    
+    for subji in range(len(FM_dat["CP"])):  
+        subj_cp_sequences = []  # Store sequences for this subject
+        
+        # Loop through sessions
+        for sessi in range(len(FM_dat["outcome"][0])): 
+            cp_indices = np.where(FM_dat["CP"][subji][sessi] == 1)[0]  # Find CP indices
+            lr_sess = FM_dat["mod_lr_clip"][key][subji][sessi]  # Get learning rate sequence
+            
+            for i, cp in enumerate(cp_indices):  # Loop through each change point
+                start_idx = cp - pre_cp
+                end_idx = cp + post_cp + 1  # Exclusive index
+
+                # Exclude sequence if out of trial bounds
+                if start_idx < 0 or end_idx > len(FM_dat["outcome"][0][1]):
+                    continue
+
+                # Exclude sequence if another CP occurs within 15 trials
+                if i < len(cp_indices) - 1:  # Check if there's a next change point
+                    next_cp = cp_indices[i + 1]
+                    if next_cp < end_idx:  # Another CP is too close
+                        continue
+                    
+                # Extract and store valid sequence
+                seq = lr_sess[start_idx:end_idx]
+                subj_cp_sequences.append(seq)
+                
+        FM_dat["CPseq_mod_lr_clip"][key].append(np.array(subj_cp_sequences))  # Convert to NumPy array and store
+
+
+
+## G_dat
+
+# Initialize CPseq key as an empty list
+G_dat["CPseq_lr_clip"] = []
+
+# Define the range around change points 
+pre_cp = 5
+post_cp = 30
+
+# Loop through subjects
+for subji in range(len(G_dat["CP"])):  # 10 subjects
+    cp_sequences = []  # Store sequences for this subject
+    
+    # Loop through sessions
+    for sessi in range(len(G_dat["outcome"][0])):  # 10 sessions
+        cp_indices = np.where(G_dat["CP"][subji][sessi] == 1)[0]  # Find CP indices
+        lr_sess = G_dat["lr_clip"][subji][sessi]  # Get learning rate sequence
+        
+        for i, cp in enumerate(cp_indices):  # Loop through each change point
+            start_idx = cp - pre_cp
+            end_idx = cp + post_cp + 1  # Exclusive index
+
+            # Exclude sequence if out of trial bounds
+            if start_idx < 0 or end_idx > len(G_dat["outcome"][0][1]):
+                continue
+
+            # Exclude sequence if another CP occurs within 15 trials
+            if i < len(cp_indices) - 1:  # Check if there's a next change point
+                next_cp = cp_indices[i + 1]
+                if next_cp < end_idx:  # Another CP is too close
+                    continue
+
+            # Extract and store valid sequence
+            seq = lr_sess[start_idx:end_idx]
+            cp_sequences.append(seq)
+
+    G_dat["CPseq_lr_clip"].append(np.array(cp_sequences))  # Convert to NumPy array and store
+
+
+G_dat['CPseq_mod_lr_clip'] = {}
+
+for key in mod_names:
+    
+    G_dat['CPseq_mod_lr_clip'][key] = []
+    
+    for subji in range(len(G_dat["CP"])):  
+        subj_cp_sequences = []  # Store sequences for this subject
+        
+        # Loop through sessions
+        for sessi in range(len(G_dat["outcome"][0])): 
+            cp_indices = np.where(G_dat["CP"][subji][sessi] == 1)[0]  # Find CP indices
+            lr_sess = G_dat["mod_lr_clip"][key][subji][sessi]  # Get learning rate sequence
+            
+            for i, cp in enumerate(cp_indices):  # Loop through each change point
+                start_idx = cp - pre_cp
+                end_idx = cp + post_cp + 1  # Exclusive index
+
+                # Exclude sequence if out of trial bounds
+                if start_idx < 0 or end_idx > len(G_dat["outcome"][0][1]):
+                    continue
+
+                # Exclude sequence if another CP occurs within 15 trials
+                if i < len(cp_indices) - 1:  # Check if there's a next change point
+                    next_cp = cp_indices[i + 1]
+                    if next_cp < end_idx:  # Another CP is too close
+                        continue
+                    
+                # Extract and store valid sequence
+                seq = lr_sess[start_idx:end_idx]
+                subj_cp_sequences.append(seq)
+                
+        G_dat["CPseq_mod_lr_clip"][key].append(np.array(subj_cp_sequences))  # Convert to NumPy array and store
+
+
+Khaw_dat["CPseq_lr_clip"] = []
+
+
+# Loop through subjects
+for subji in range(len(Khaw_dat["CP"])):  
+    cp_sequences = []  # Store sequences for this subject
+    
+    # Loop through sessions
+    for sessi in range(len(Khaw_dat["outcome"][0])): 
+        cp_indices = np.where(Khaw_dat["CP"][subji][sessi] == 1)[0]  # Find CP indices
+        lr_sess = Khaw_dat["lr_clip"][subji][sessi]  # Get learning rate sequence
+        
+        for i, cp in enumerate(cp_indices):  # Loop through each change point
+            start_idx = cp - pre_cp
+            end_idx = cp + post_cp + 1  # Exclusive index
+
+            # Exclude sequence if out of trial bounds
+            if start_idx < 0 or end_idx > len(Khaw_dat["outcome"][0][1]):
+                continue
+
+            # Exclude sequence if another CP occurs within 15 trials
+            if i < len(cp_indices) - 1:  # Check if there's a next change point
+                next_cp = cp_indices[i + 1]
+                if next_cp < end_idx:  # Another CP is too close
+                    continue
+
+            # Extract and store valid sequence
+            seq = lr_sess[start_idx:end_idx]
+            cp_sequences.append(seq)
+
+    Khaw_dat["CPseq_lr_clip"].append(np.array(cp_sequences))  # Convert to NumPy array and store
+
+
+Khaw_dat['CPseq_mod_lr_clip'] = {}
+
+
+for key in mod_names:
+    
+    Khaw_dat['CPseq_mod_lr_clip'][key] = []
+    
+    for subji in range(len(Khaw_dat["CP"])):  
+        subj_cp_sequences = []  # Store sequences for this subject
+        
+        # Loop through sessions
+        for sessi in range(len(Khaw_dat["outcome"][0])): 
+            cp_indices = np.where(Khaw_dat["CP"][subji][sessi] == 1)[0]  # Find CP indices
+            lr_sess = Khaw_dat["mod_lr_clip"][key][subji][sessi]  # Get learning rate sequence
+            
+            for i, cp in enumerate(cp_indices):  # Loop through each change point
+                start_idx = cp - pre_cp
+                end_idx = cp + post_cp + 1  # Exclusive index
+
+                # Exclude sequence if out of trial bounds
+                if start_idx < 0 or end_idx > len(Khaw_dat["outcome"][0][1]):
+                    continue
+
+                # Exclude sequence if another CP occurs within 15 trials
+                if i < len(cp_indices) - 1:  # Check if there's a next change point
+                    next_cp = cp_indices[i + 1]
+                    if next_cp < end_idx:  # Another CP is too close
+                        continue
+                    
+                # Extract and store valid sequence
+                seq = lr_sess[start_idx:end_idx]
+                subj_cp_sequences.append(seq)
+                
+        Khaw_dat["CPseq_mod_lr_clip"][key].append(np.array(subj_cp_sequences))  # Convert to NumPy array and store
+
+
+#### group level median lrs 
+
+FM_avg_across_subjects_clip = []
+FM_sem_across_subjects_clip = []
+
+time_range = np.arange(-5, 16)
+n_boot = 1000  # Number of bootstrap samples
+
+for t in range(len(time_range)):
+    values_at_t = []
+
+    # Collect values across subjects for this timepoint
+    for subji in range(len(FM_dat["CPseq_lr_clip"])):
+        subj_cpseq = FM_dat["CPseq_lr_clip"][subji]
+        avg_at_t_for_subj = np.mean(subj_cpseq[:, t])
+        values_at_t.append(avg_at_t_for_subj)
+
+    values_at_t = np.array(values_at_t)
+
+    # Compute median across subjects
+    median_at_t = np.median(values_at_t)
+    FM_avg_across_subjects_clip.append(median_at_t)
+
+    # === Bootstrap SEM for the median ===
+    boot_medians = []
+    for _ in range(n_boot):
+        boot_sample = np.random.choice(values_at_t, size=len(values_at_t), replace=True)
+        boot_medians.append(np.median(boot_sample))
+    sem_at_t = np.std(boot_medians)  # Standard deviation of bootstrap medians = SEM estimate
+
+    FM_sem_across_subjects_clip.append(sem_at_t)
+
+# Convert to numpy arrays
+FM_avg_across_subjects_clip = np.array(FM_avg_across_subjects_clip)
+FM_sem_across_subjects_clip = np.array(FM_sem_across_subjects_clip)
+
+
+FM_lrs_avg_across_subjects_mod = {}
+FM_lrs_sem_across_subjects_mod = {}
+
+for key in mod_names:  
+    
+    FM_lrs_avg_across_subjects_mod[key] = []
+    FM_lrs_sem_across_subjects_mod[key] = []
+    
+    # Loop through each timestep (from -2 to 15)
+    for t in range(len(time_range)):  # 18 timesteps, corresponding to -2 to 15
+        # Initialize a list to hold the value for each subject at this timestep
+        values_at_t = []
+        
+        # Loop through each subject in G_dat['CPseq']
+        for subji in range(len(FM_dat["CPseq_mod_lr_clip"][key])):
+            subj_cpseq = FM_dat["CPseq_mod_lr_clip"][key][subji]  # Extract the change point sequences for this subject
+            
+            
+            avg_at_t_for_subj = np.mean(subj_cpseq[:, t])  # Average for the current subject at timestep t
+                
+            values_at_t.append(avg_at_t_for_subj)  # Collect the averaged value for the subject
+                
+        # Compute the average for this timestep across all subjects
+        avg_at_t = np.median(values_at_t)  
+        
+        # Append the averaged value to the list
+        FM_lrs_avg_across_subjects_mod[key].append(avg_at_t)
+        
+        # Compute the SEM for this timestep across subjects
+        sem_at_t = np.std(values_at_t) / np.sqrt(len(values_at_t))  # SEM across subjects
+        FM_lrs_sem_across_subjects_mod[key].append(sem_at_t)
+    
+    # Now `avg_across_subjects` contains the average value at each timestep across subjects
+    FM_lrs_sem_across_subjects_mod[key] = np.array(FM_lrs_sem_across_subjects_mod[key])  # Convert to a numpy array for easy plotting   
+    FM_lrs_avg_across_subjects_mod[key] = np.array(FM_lrs_avg_across_subjects_mod[key]) 
+
+
+
+G_avg_across_subjects_clip = []
+G_sem_across_subjects_clip = []
+time_range = np.arange(-5, 31) 
+n_boot = 1000  # Number of bootstrap samples
+
+for t in range(len(time_range)):
+    values_at_t = []
+
+    # Collect values across subjects for this timepoint
+    for subji in range(len(G_dat["CPseq_lr_clip"])):
+        subj_cpseq = G_dat["CPseq_lr_clip"][subji]
+        avg_at_t_for_subj = np.mean(subj_cpseq[:, t])
+        values_at_t.append(avg_at_t_for_subj)
+
+    values_at_t = np.array(values_at_t)
+
+    # Compute median across subjects
+    median_at_t = np.median(values_at_t)
+    G_avg_across_subjects_clip.append(median_at_t)
+
+    # === Bootstrap SEM for the median ===
+    boot_medians = []
+    for _ in range(n_boot):
+        boot_sample = np.random.choice(values_at_t, size=len(values_at_t), replace=True)
+        boot_medians.append(np.median(boot_sample))
+    sem_at_t = np.std(boot_medians)  # Standard deviation of bootstrap medians = SEM estimate
+
+    G_sem_across_subjects_clip.append(sem_at_t)
+
+# Convert to numpy arrays
+G_avg_across_subjects_clip = np.array(G_avg_across_subjects_clip)
+G_sem_across_subjects_clip = np.array(G_sem_across_subjects_clip)
+
+G_lrs_avg_across_subjects_mod = {}
+
+for key in mod_names:  
+    
+    G_lrs_avg_across_subjects_mod[key] = []
+
+    
+    # Loop through each timestep (from -2 to 15)
+    for t in range(len(time_range)):  # 18 timesteps, corresponding to -2 to 15
+        # Initialize a list to hold the value for each subject at this timestep
+        values_at_t = []
+        
+        # Loop through each subject in G_dat['CPseq']
+        for subji in range(len(G_dat["CPseq_mod_lr_clip"][key])):
+            subj_cpseq = G_dat["CPseq_mod_lr_clip"][key][subji]  # Extract the change point sequences for this subject
+            
+            
+            avg_at_t_for_subj = np.mean(subj_cpseq[:, t])  # Average for the current subject at timestep t
+                
+            values_at_t.append(avg_at_t_for_subj)  # Collect the averaged value for the subject
+                
+        # Compute the average for this timestep across all subjects
+        avg_at_t = np.median(values_at_t)  
+        
+        # Append the averaged value to the list
+        G_lrs_avg_across_subjects_mod[key].append(avg_at_t)
+   
+    G_lrs_avg_across_subjects_mod[key] = np.array(G_lrs_avg_across_subjects_mod[key]) 
+
+
+Khaw_avg_across_subjects_clip = []
+Khaw_sem_across_subjects_clip = []
+
+for t in range(len(time_range)):
+    values_at_t = []
+
+    # Collect values across subjects for this timepoint
+    for subji in range(len(Khaw_dat["CPseq_lr_clip"])):
+        subj_cpseq = Khaw_dat["CPseq_lr_clip"][subji]
+        avg_at_t_for_subj = np.mean(subj_cpseq[:, t])
+        values_at_t.append(avg_at_t_for_subj)
+
+    values_at_t = np.array(values_at_t)
+
+    # Compute median across subjects
+    median_at_t = np.median(values_at_t)
+    Khaw_avg_across_subjects_clip.append(median_at_t)
+
+    # === Bootstrap SEM for the median ===
+    boot_medians = []
+    for _ in range(n_boot):
+        boot_sample = np.random.choice(values_at_t, size=len(values_at_t), replace=True)
+        boot_medians.append(np.median(boot_sample))
+    sem_at_t = np.std(boot_medians)  # Standard deviation of bootstrap medians = SEM estimate
+
+    Khaw_sem_across_subjects_clip.append(sem_at_t)
+
+# Convert to numpy arrays
+Khaw_avg_across_subjects_clip = np.array(Khaw_avg_across_subjects_clip)
+Khaw_sem_across_subjects_clip = np.array(Khaw_sem_across_subjects_clip)
+
+
+Khaw_lrs_avg_across_subjects_mod = {}
+
+for key in mod_names:  
+    
+    Khaw_lrs_avg_across_subjects_mod[key] = []
+
+    
+    # Loop through each timestep (from -2 to 15)
+    for t in range(len(time_range)):  # 18 timesteps, corresponding to -2 to 15
+        # Initialize a list to hold the value for each subject at this timestep
+        values_at_t = []
+        
+        # Loop through each subject in G_dat['CPseq']
+        for subji in range(len(Khaw_dat["CPseq_mod_lr_clip"][key])):
+            subj_cpseq = Khaw_dat["CPseq_mod_lr_clip"][key][subji]  # Extract the change point sequences for this subject
+            
+            
+            avg_at_t_for_subj = np.mean(subj_cpseq[:, t])  # Average for the current subject at timestep t
+                
+            values_at_t.append(avg_at_t_for_subj)  # Collect the averaged value for the subject
+                
+        # Compute the average for this timestep across all subjects
+        avg_at_t = np.median(values_at_t)  
+        
+        # Append the averaged value to the list
+        Khaw_lrs_avg_across_subjects_mod[key].append(avg_at_t)
+        
+        
+    
+   
+    Khaw_lrs_avg_across_subjects_mod[key] = np.array(Khaw_lrs_avg_across_subjects_mod[key]) 
+
+
+#### plot
+
+# Model names
+mod_names = ["HMM", "HGF", "VKF", "Mixed_delta", "reduced_bayes", "reduced_bayes_lamda",
+                "changepoint", "PID", "p_hall"]
+
+custom_labels = {
+    "HMM": "HMM",
+    "HGF": "HGF",
+    "VKF": "VKF",
+    "Mixed_delta": "Mixture of delta rules",
+    "reduced_bayes": "Reduced Bayesian model",
+    "reduced_bayes_lamda": "Reduced Bayesian model\n(under-weighted likelihood)",
+    "changepoint": "Change Point model",
+    "PID": "PID",
+    "p_hall": "Pearce-Hall model"
+}
+# Manual colors
+manual_color_indices = {"Mixed_delta": 0, "PID": 1, "HMM": 3}
+manual_colors = {model: plt.get_cmap("tab10")(idx) for model, idx in manual_color_indices.items()}
+
+# Assign other colors, skipping indices already used
+used_indices = set(manual_color_indices.values())
+cmap = plt.get_cmap("tab10")
+available_indices = [i for i in range(cmap.N) if i not in used_indices]
+other_models = [m for m in mod_names if m not in manual_colors]
+other_colors = {model: cmap(idx) for model, idx in zip(other_models, available_indices)}
+
+
+# Prepare figure with 2 rows (adjust the height of the second plot)
+fig = plt.figure(figsize=(14.5, 7.5))
+
+# Create a gridspec with two rows, where the second row is shorter
+gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1])  # Height ratio: 3 for first, 1 for second
+
+# --- First plot: Learning Rate Trajectories ---
+ax1 = plt.subplot(gs[0])  # First subplot (larger one)
+line_map = {}
+
+time_range = np.arange(-5, 16)
+xticks_positions = np.array([-5, 0, 5, 10, 15])
+
+all_colors = {**manual_colors, **other_colors}
+
+
+# Plot all models
+for key in mod_names:
+    avg = FM_lrs_avg_across_subjects_mod[key]
+    baseline = avg[0:6].mean()
+    avg_corrected = avg - baseline
+    color = all_colors[key]
+    linewidth = 1.5
+    line = ax1.plot(time_range, avg_corrected, color=color, linestyle='-', linewidth=linewidth)[0]
+    line_map[key] = line
+
+# Plot subjects last
+subject_curve = FM_avg_across_subjects_clip
+subject_sem = FM_sem_across_subjects_clip
+baseline_subject = subject_curve[0:6].mean()
+subject_corrected = subject_curve - baseline_subject
+
+subject_line = ax1.plot(time_range, subject_corrected, label="Subjects", color="k", linewidth=2)[0]
+ax1.fill_between(time_range,
+                 subject_corrected - subject_sem,
+                 subject_corrected + subject_sem,
+                 color="grey", alpha=0.3)
+
+line_map["Subjects"] = subject_line
+
+
+# Final plot setup for the first plot
+legend_keys = ["Subjects"] + mod_names
+legend_labels = [custom_labels.get(k, k) if k != "Subjects" else "Subjects" for k in legend_keys]
+legend_lines = [line_map[k] for k in legend_keys]
+
+ax1.axvline(0, color='black', linestyle='--', linewidth=1)
+ax1.set_xticks(xticks_positions)
+ax1.set_xlabel("Trial number relative to change point")
+ax1.set_ylabel("Learning Rate (Baseline-substracted)")
+ax1.set_title("Foucault & Meyniel (2024)")
+
+ax1.legend(legend_lines, legend_labels, loc='upper right', ncol=3, frameon=False)
+ax1.spines["top"].set_visible(False)
+ax1.spines["right"].set_visible(False)
+
+
+# Add "A" in bold at the top-left corner of the first plot
+ax1.text(-0.05, 1.04, "A", transform=ax1.transAxes, fontsize=16, fontweight='bold', va='top', ha='right')
+
+
+# --- Second plot: Baseline Bar Plot ---
+ax2 = plt.subplot(gs[1])  # Second subplot (shorter one)
+baseline_values = {}
+
+# Compute baselines for models
+for key in mod_names:
+    avg = FM_lrs_avg_across_subjects_mod[key]
+    baseline = avg[0:6].mean()
+    baseline_values[key] = baseline
+    
+    
+# Compute subject baseline
+subject_baseline = FM_avg_across_subjects_clip[0:6].mean()
+baseline_values["Subjects"] = subject_baseline
+
+# Add label and color for subject
+custom_labels["Subjects"] = "Subjects"
+all_colors["Subjects"] = "black"
+
+# Put subject first in display
+display_keys = ["Subjects"] + mod_names
+baseline_heights = [baseline_values[k] for k in display_keys]
+bar_colors = [all_colors[k] for k in display_keys]
+bar_labels = [custom_labels[k] for k in display_keys]
+
+# Plot baseline bar plot
+ax2.bar(range(len(display_keys)), baseline_heights, color=bar_colors)
+# ax2.set_xticks(range(len(display_keys)))
+# ax2.set_xticklabels(bar_labels, rotation=45, ha='right')
+
+ax2.set_xticks([])
+ax2.set_xticklabels([])
+
+ax2.set_ylabel("Baseline Learning Rate")
+ax2.spines["top"].set_visible(False)
+ax2.spines["right"].set_visible(False)
+
+
+
+plt.savefig("figures/FigureS3A.png", dpi=300, bbox_inches='tight')
+plt.show()
+    
+## S3B
+
+time_range = np.arange(-5, 31) 
+xticks_positions = np.array([-5,0,5,10,15,20,25,30])
+
+
+fig = plt.figure(figsize=(14.5, 7.5))
+
+# Create a gridspec with two rows, where the second row is shorter
+gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1])  # Height ratio: 3 for first, 1 for second
+
+# --- First plot: Learning Rate Trajectories ---
+ax1 = plt.subplot(gs[0])  # First subplot (larger one)
+line_map = {}
+
+# Plot all models
+for key in mod_names:
+    avg = G_lrs_avg_across_subjects_mod[key]
+    baseline = avg[0:6].mean()
+    avg_corrected = avg - baseline
+    color = all_colors[key]
+    linewidth = 1.5
+    line = ax1.plot(time_range, avg_corrected, color=color, linestyle='-', linewidth=linewidth)[0]
+    line_map[key] = line
+
+
+# Plot subjects last
+subject_curve = G_avg_across_subjects_clip
+subject_sem = G_sem_across_subjects_clip
+baseline_subject = subject_curve[0:6].mean()
+subject_corrected = subject_curve - baseline_subject
+
+subject_line = ax1.plot(time_range, subject_corrected, label="Subjects", color="k", linewidth=2)[0]
+ax1.fill_between(time_range,
+                 subject_corrected - subject_sem,
+                 subject_corrected + subject_sem,
+                 color="grey", alpha=0.3)
+
+line_map["Subjects"] = subject_line
+
+
+# Final plot setup for the first plot
+legend_keys = ["Subjects"] + mod_names
+legend_labels = [custom_labels.get(k, k) if k != "Subjects" else "Subjects" for k in legend_keys]
+legend_lines = [line_map[k] for k in legend_keys]
+
+ax1.axvline(0, color='black', linestyle='--', linewidth=1)
+ax1.set_xticks(xticks_positions)
+ax1.set_xlabel("Trial number relative to change point")
+ax1.set_ylabel("Learning Rate (Baseline-substracted)")
+ax1.set_title("Gallistel et al. (2014)")
+
+ax1.legend(legend_lines, legend_labels, loc='upper right', ncol=3, frameon=False)
+ax1.spines["top"].set_visible(False)
+ax1.spines["right"].set_visible(False)
+
+
+ax1.text(-0.05, 1.04, "B", transform=ax1.transAxes, fontsize=16, fontweight='bold', va='top', ha='right')
+
+
+# --- Second plot: Baseline Bar Plot ---
+ax2 = plt.subplot(gs[1])  # Second subplot (shorter one)
+baseline_values = {}
+
+# Compute baselines for models
+for key in mod_names:
+    avg = G_lrs_avg_across_subjects_mod[key]
+    baseline = avg[0:6].mean()
+    baseline_values[key] = baseline
+
+# Compute subject baseline
+subject_baseline = G_avg_across_subjects_clip[0:6].mean()
+baseline_values["Subjects"] = subject_baseline
+
+# Add label and color for subject
+custom_labels["Subjects"] = "Subjects"
+all_colors["Subjects"] = "black"
+
+# Put subject first in display
+display_keys = ["Subjects"] + mod_names
+baseline_heights = [baseline_values[k] for k in display_keys]
+bar_colors = [all_colors[k] for k in display_keys]
+bar_labels = [custom_labels[k] for k in display_keys]
+
+# Plot baseline bar plot
+ax2.bar(range(len(display_keys)), baseline_heights, color=bar_colors)
+# ax2.set_xticks(range(len(display_keys)))
+# ax2.set_xticklabels(bar_labels, rotation=45, ha='right')
+
+ax2.set_xticks([])
+ax2.set_xticklabels([])
+
+ax2.set_ylabel("Baseline Learning Rate")
+ax2.spines["top"].set_visible(False)
+ax2.spines["right"].set_visible(False)
+
+
+
+plt.savefig("figures/FigureS3B.png", dpi=300, bbox_inches='tight')
+plt.show()
+
+
+## S3C
+
+fig = plt.figure(figsize=(14.5, 7.5))
+
+# Create a gridspec with two rows, where the second row is shorter
+gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1])  # Height ratio: 3 for first, 1 for second
+
+# --- First plot: Learning Rate Trajectories ---
+ax1 = plt.subplot(gs[0])  # First subplot (larger one)
+line_map = {}
+
+# Plot all models
+for key in mod_names:
+    avg = Khaw_lrs_avg_across_subjects_mod[key]
+    baseline = avg[0:6].mean()
+    avg_corrected = avg - baseline
+    color = all_colors[key]
+    linewidth = 1.5
+    line = ax1.plot(time_range, avg_corrected, color=color, linestyle='-', linewidth=linewidth)[0]
+    line_map[key] = line
+
+# Plot subjects last
+subject_curve = Khaw_avg_across_subjects_clip
+subject_sem = Khaw_sem_across_subjects_clip
+baseline_subject = subject_curve[0:6].mean()
+subject_corrected = subject_curve - baseline_subject
+
+subject_line = ax1.plot(time_range, subject_corrected, label="Subjects", color="k", linewidth=2)[0]
+ax1.fill_between(time_range,
+                 subject_corrected - subject_sem,
+                 subject_corrected + subject_sem,
+                 color="grey", alpha=0.3)
+
+line_map["Subjects"] = subject_line
+
+# Final plot setup for the first plot
+legend_keys = ["Subjects"] + mod_names
+legend_labels = [custom_labels.get(k, k) if k != "Subjects" else "Subjects" for k in legend_keys]
+legend_lines = [line_map[k] for k in legend_keys]
+
+ax1.axvline(0, color='black', linestyle='--', linewidth=1)
+ax1.set_xticks(xticks_positions)
+ax1.set_xlabel("Trial number relative to change point")
+ax1.set_ylabel("Learning Rate (Baseline-substracted)")
+ax1.set_title("Khaw et al. (2017)")
+
+ax1.legend(legend_lines, legend_labels, loc='upper right', ncol=3, frameon=False)
+ax1.spines["top"].set_visible(False)
+ax1.spines["right"].set_visible(False)
+
+
+
+ax1.text(-0.05, 1.04, "C", transform=ax1.transAxes, fontsize=16, fontweight='bold', va='top', ha='right')
+
+
+
+# --- Second plot: Baseline Bar Plot ---
+ax2 = plt.subplot(gs[1])  # Second subplot (shorter one)
+baseline_values = {}
+
+# Compute baselines for models
+for key in mod_names:
+    avg = Khaw_lrs_avg_across_subjects_mod[key]
+    baseline = avg[0:6].mean()
+    baseline_values[key] = baseline
+
+# Compute subject baseline
+subject_baseline = Khaw_avg_across_subjects_clip[0:6].mean()
+baseline_values["Subjects"] = subject_baseline
+
+# Add label and color for subject
+custom_labels["Subjects"] = "Subjects"
+all_colors["Subjects"] = "black"
+
+# Put subject first in display
+display_keys = ["Subjects"] + mod_names
+baseline_heights = [baseline_values[k] for k in display_keys]
+bar_colors = [all_colors[k] for k in display_keys]
+bar_labels = [custom_labels[k] for k in display_keys]
+
+# Plot baseline bar plot
+ax2.bar(range(len(display_keys)), baseline_heights, color=bar_colors)
+# ax2.set_xticks(range(len(display_keys)))
+# ax2.set_xticklabels(bar_labels, rotation=45, ha='right')
+
+ax2.set_xticks([])
+ax2.set_xticklabels([])
+
+ax2.set_ylabel("Baseline Learning Rate")
+ax2.spines["top"].set_visible(False)
+ax2.spines["right"].set_visible(False)
+
+
+
+plt.savefig("figures/FigureS3C.png", dpi=300, bbox_inches='tight')
+plt.show()
+
+
+#%% Figure S4
+
+mod_names = ["HMM", "Mixed_delta","PID"]
+
+# Create an empty dictionary to store DataFrames for each model
+G_cv_test_sum_dict = {}
+
+# Loop through each model and load the corresponding CSV file into the dictionary
+for key in mod_names:
+    file_path = f"results/cv_MSE_by_subj_sess/G_{key}_cv_test_sum.csv"
+    cv_test_sum_df = pd.read_csv(file_path)
+    
+    # Add the DataFrame to the dictionary with the model name as the key
+    G_cv_test_sum_dict[key] = cv_test_sum_df
+    
+    
+    
+# Create an empty dictionary to store DataFrames for each model
+K_cv_test_sum_dict = {}
+
+# Loop through each model and load the corresponding CSV file into the dictionary
+for key in mod_names:
+    file_path = f"results/cv_MSE_by_subj_sess/K_{key}_cv_test_sum.csv"
+    cv_test_sum_df = pd.read_csv(file_path)
+    
+    # Add the DataFrame to the dictionary with the model name as the key
+    K_cv_test_sum_dict[key] = cv_test_sum_df
+
+
+
+models = ["HMM", "Mixed_delta", "PID"]  
+colors = ['tab:blue', 'tab:orange', 'tab:green']
+sessions = np.arange(10)
+bar_width = 0.25
+
+fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(11, 7), sharex=True)
+
+# === G_dat ===
+n_subjects_G = 10
+all_means_G = []
+
+for i, model in enumerate(models):
+    df = G_cv_test_sum_dict[model]  # shape (10, 10)
+    means = df.mean(axis=0)
+    all_means_G.append(means)
+
+    axes[0].bar(sessions + i * bar_width, means, width=bar_width,
+                label=model, color=colors[i], edgecolor='black')
+
+all_means_G = np.array(all_means_G)
+
+# for s in range(10):
+#     min_idx = np.argmin(all_means_G[:, s])
+#     min_height = all_means_G[min_idx, s]
+#     bar_x = sessions[s] + min_idx * bar_width
+#     axes[0].text(bar_x, min_height + 0.004, '*', ha='center', va='bottom', fontsize=14, fontweight='bold')
+
+axes[0].set_ylabel('Mean MSE')
+axes[0].set_title('Gallistel et al. (2014)')
+axes[0].set_ylim(0, 0.17)
+axes[0].spines["top"].set_visible(False)
+axes[0].spines["right"].set_visible(False)
+axes[0].legend(["HMM", "Mixture of delta rules", "PID"])
+
+# === K_dat ===
+n_subjects_K = 11
+all_means_K = []
+
+for i, model in enumerate(models):
+    df = K_cv_test_sum_dict[model]  # shape (11, 10)
+    means = df.mean(axis=0)
+    all_means_K.append(means)
+
+    axes[1].bar(sessions + i * bar_width, means, width=bar_width,
+                label=model, color=colors[i], edgecolor='black')
+
+all_means_K = np.array(all_means_K)
+
+# for s in range(10):
+#     min_idx = np.argmin(all_means_K[:, s])
+#     min_height = all_means_K[min_idx, s]
+#     bar_x = sessions[s] + min_idx * bar_width
+#     axes[1].text(bar_x, min_height + 0.004, '*', ha='center', va='bottom', fontsize=14, fontweight='bold')
+
+axes[1].set_xlabel('Session')
+axes[1].set_ylabel('Mean MSE')
+axes[1].set_title('Khaw et al. (2017)')
+axes[1].set_xticks(sessions + bar_width)
+axes[1].set_xticklabels([str(s) for s in range(10)])
+axes[1].set_ylim(0, 0.17)
+axes[1].spines["top"].set_visible(False)
+axes[1].spines["right"].set_visible(False)
+
+plt.tight_layout()
+plt.savefig("figures/FigureS4.png", dpi=300, bbox_inches='tight')
+plt.show()
+
+    
+
+
+

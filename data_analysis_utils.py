@@ -16,7 +16,7 @@ from time import time
 import scipy.optimize as so
 
 from models.Gallistel_2014 import ChangePointModel, bern_cp_kl_fun
-from models.HMM_fit import HMM
+from models.HMM_fit import HMM,HMM_trial
 from models import IdealObserver as IO
 
 from models.delta_learning import delta_update,delta_rule,pearce_hall_update,pearce_hall
@@ -38,6 +38,8 @@ def load_data(dat):
     "Gallistel" = Gallistel et al(2014)
     "Khaw" = Khaw et al(2017)
     """   
+    
+   
     
     if dat == "FM":
         
@@ -108,6 +110,11 @@ def load_data(dat):
             FM_dat['sub_est'].append(np.array(subj_est))
             FM_dat['true_p'].append(np.array(subj_true_p))
             FM_dat['update'].append(np.array(subj_update))
+            
+            
+        
+        
+        
         return FM_dat
             
     elif dat == "Gallistel" :
@@ -238,7 +245,13 @@ def load_data(dat):
             Khaw_dat["update"].append(np.array(update_flags))
         
         return Khaw_dat
+
         
+
+
+
+
+
   
 def learning_rate(outcome,sub_est):
     
@@ -264,6 +277,28 @@ def learning_rate(outcome,sub_est):
     
     return lr
 
+
+def learning_rate_clip(outcome,sub_est):
+    
+    lr = np.zeros(len(outcome))
+    num_trial = len(outcome)
+    
+    lr[0] = np.nan
+    
+    sub_est = np.clip(sub_est, 0.1, 0.9)
+    
+    for t in range(1,num_trial):
+    
+        prev_estimate = sub_est[t-1] 
+        estimate = sub_est[t]
+        
+        nom = estimate - prev_estimate
+        denom = outcome[t] - prev_estimate
+     
+        
+        lr[t] = nom / denom
+    
+    return lr
 
 
 
@@ -777,7 +812,7 @@ def random_outcomes_from_p1s(p1s):
 
 
 
-def gen_sequences(n_sessions,n_trials,seed,model):
+def gen_sequences(n_sessions,n_trials,seed,model,mode):
 
     model = model
     n_sessions = n_sessions
@@ -844,7 +879,11 @@ def gen_sequences(n_sessions,n_trials,seed,model):
                 # print(data_dict_df)
     data_df = pd.DataFrame.from_dict(data_dict_df)
     
-    data_df.to_csv(f"results/mod_recovery/{model}_gen_sequences.csv")
+    if mode == 1:
+    
+        data_df.to_csv(f"results/mod_recovery/{model}_gen_sequences.csv")
+    elif mode == 2:
+        data_df.to_csv(f"results/para_recovery/{model}_gen_sequences.csv")
     
     
         
@@ -884,11 +923,11 @@ def sample_params(model,niter, seed):
     """
       
     
-    ada_df = pd.read_csv('optimisation_results/ada_opt_results.csv')
+    FM_df = pd.read_csv('optimisation_results/FM_opt_results.csv')
     G_df = pd.read_csv('optimisation_results/G_opt_results.csv')
     K_df = pd.read_csv('optimisation_results/K_opt_results.csv')
     
-    combined_df = pd.concat([ada_df, G_df, K_df], ignore_index=True)
+    combined_df = pd.concat([FM_df, G_df, K_df], ignore_index=True)
         
     
     
@@ -965,9 +1004,9 @@ def sample_params(model,niter, seed):
 ##  stimulated model data
 
 
-def stimulate_mod_data(model,niter,seed,n_sessions,n_trials):
+def stimulate_mod_data(model,niter,seed,n_sessions,n_trials,mode):
     
-    gen_seqs = gen_sequences(n_sessions,n_trials,seed,model) 
+    gen_seqs = gen_sequences(n_sessions,n_trials,seed,model,mode) 
     mod_paras = sample_params(model,niter,seed)
     
     # get the estimate 
@@ -1304,4 +1343,218 @@ def modr_get_optimised_result(model,stimulation_seqs,stimulation_results):
      
     
     return result, x_min, fval 
+
+
+
+#### parameter recovery
+
+
+def pr_get_optimised_result(niter, model,stimulation_seqs,stimulation_results):
+    # get optimised paras
+    opt_res = []
+    
+    t_start_optimised = time()
+
+    for i in range(niter):
+
+        data_seq = stimulation_seqs[i]
+        data_seq = np.concatenate(data_seq).flatten()    
+        mod_stim = stimulation_results[i]
+        model = model
+
+        fp_init, bounds = modr_get_initial_parameters(data_seq,mod_stim,model)  
+                
+        fp_init = np.array(fp_init)
+        
+            
+        print(f'Paras_recovery: Running optimization {i} for {model}')  
+        
+        opt = so.minimize(modr_MSE_fun, fp_init, args=(data_seq,mod_stim,model),
+                                     method='Powell', bounds=bounds, options={'disp': False}) 
+                   
+        fval = opt['fun']
+        x_min = opt['x']
+        result = opt["success"]
+            
+        opt_res.append(x_min)
+    
+    t_end_optimised = (time() - t_start_optimised) / 60
+    print(f"Paras_recovery for {model}: DONE IN {t_end_optimised:0.3f} MIN.")
+    
+    return opt_res 
+
+
+
+#### MSE by session
+
+def MSE_fun_trial(pars,data_seq,mod_stim,model,expID):
+    
+     
+    if model =="HMM":
+       
+        p_c = pars[0]
+        
+        predicted_response = HMM_trial(p_c,data_seq,expID)
+        
+    
+    
+    elif model == "PID":
+        Kp = pars[0]
+        Ki = pars[1]
+        Kd = pars[2]
+        lamda = pars[3]
+        predicted_response = PID_update(data_seq,Kp,Ki,Kd,lamda)
+        
+    elif model == "Mixed_delta":
+        delta = pars[:-2]
+        hRate = pars[-2]
+        nu_p = pars[-1]
+        predicted_response = update_mixed_delta(data_seq,delta,hRate,nu_p)
+        
+    
+    
+    predicted_response = np.array(predicted_response)
+    
+   
+        # Compute squared errors
+    squared_errors = (predicted_response - mod_stim) ** 2
+    
+    # if np.any(np.isnan(predicted_response)):
+    #     return np.nan
+    
+    # sum of squared error
+    sse = np.sum(squared_errors)
+    
+    # mean squared error
+    mse = sse / len(predicted_response)  
+    
+    # rmse = np.sqrt(mse)
+    
+    
+        
+    return mse
+
+def get_initial_parameters_trial(data_seq,mod_stim,model,expID):
+   
+    if model =="HMM":
+        
+        # HMM: p_c
+        lb = np.array([0.0001])
+        ub = np.array([0.9])
+        
+        bounds = [(0.0001, 0.9)]
+        
+    elif model == "changepoint":
+        # IIAB: T1, T2 
+        lb = np.array([0.01, 0.001])
+        ub = np.array([2, 20])
+        
+        bounds = [(0.01,2), (.001,20)]
+       
+        
+    elif model == "delta_rule":
+        # delta_rule: lr
+        lb = np.array([0.0001])
+        ub = np.array([0.9])
+        
+        bounds = [(0.0001, 0.9)]
+        
+    elif model == "p_hall":
+        # Pearce-Hall: intial lr, weight
+        lb = np.array([0.0001, 0])
+        ub = np.array([0.9, 1])
+        
+        bounds = [(0.0001, 0.9), (0, 1)]
+        
+    elif model == "reduced_bayes":
+        # reduced Bayes: p_c
+        lb = np.array([0.0001])
+        ub = np.array([0.9])       
+        bounds = [(0.0001, 0.9)]
+        
+    elif model =="reduced_bayes_lamda":
+        # reduced_bayes_lamda: p_c, lamda
+        lb = np.array([0.0001, 0])
+        ub = np.array([0.9, 1])
+        
+        bounds = [(0.0001, 0.9), (0, 1)]
+        
+    elif model == "PID":
+        # PID: Kp,Ki,Kd,lamda
+        lb = np.array([-1, -1, -1, 0])
+        ub = np.array([1, 1, 1, 1])
+        
+        bounds = [(-1, 1), (-1, 1),(-1, 1),(0, 1)]
+        
+    elif model == "Mixed_delta":
+        # Mixed_delta: delta1, delta2,hrate,nu_p
+        lb = np.array([1.01, 1.01, 0, 0])
+        ub = np.array([8, 17, 1, 5])
+        
+        bounds = [(1.01, 8), (1.01, 17),(0, 1),(0, 5)]
+        
+    elif model == "VKF":
+        # VKF: lamda,omega,v0
+        lb = np.array([0, 0, 0])
+        ub = np.array([1, 1, 1])
+        
+        bounds = [(0,1), (0,1), (0, 1)]
+        
+    elif model == "HGF":
+        # HGF: nu,kappa,omega
+        lb = np.array([0.0001, 0.01, -5])
+        ub = np.array([10, 1, 2])
+        
+        bounds = [(0.0001,10), (0.01,1), (-5, 2)]
+            
+    
+    best_MSE = np.inf
+    fp_init = None
+    
+    n_initial_guesses = 100
+    
+    for ii in range(n_initial_guesses):
+        
+        fp_random = lb + (ub - lb) * np.random.rand(len(lb))
+        fp_random = np.maximum(np.minimum(fp_random, ub),lb)
+        
+        MSE = MSE_fun_trial(fp_random, data_seq,mod_stim,model,expID)
+        
+        if MSE < best_MSE :
+            best_MSE = MSE
+            fp_init = fp_random
+        
+    
+
+    return fp_init, bounds
+
+
+
+def get_optimised_result_trial(model,stimulation_seqs,stimulation_results,expID):
+    
+    
+    # get optimised paras
+   
+    data_seq = stimulation_seqs  
+    mod_stim = stimulation_results
+    model = model
+
+    fp_init, bounds = get_initial_parameters_trial(data_seq,mod_stim,model,expID)  
+                
+    fp_init = np.array(fp_init)
+        
+        
+    opt = so.minimize(MSE_fun_trial, fp_init, args=(data_seq,mod_stim,model,expID),
+                                     method='Powell', bounds=bounds, options={'disp': False}) 
+                   
+    fval = opt['fun']
+    x_min = opt['x']
+    result = opt["success"]
+    
+    return result, x_min, fval 
+
+
+
+
+
 

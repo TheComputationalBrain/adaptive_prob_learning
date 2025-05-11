@@ -473,7 +473,7 @@ for key in mod_names:
     
     # get stimulated paras
     
-    mod_est, mod_paras, seqs, truep, seqs_index = da.stimulate_mod_data(model,niter,seed,n_sessions,n_trials)
+    mod_est, mod_paras, seqs, truep, seqs_index = da.stimulate_mod_data(model,niter,seed,n_sessions,n_trials,1)
     
     reorganized_mod_est = [np.array_split(array, 10) for array in mod_est]
     
@@ -682,3 +682,509 @@ for key in mod_names:  # Loop over datasets (`key`)
         cv_paras_filename = f"results/mod_recovery/cv_paras/{key}_{mod}_cv_paras.csv"
         cv_paras_df.to_csv(cv_paras_filename, index=False)
         
+        
+        
+#%% parameters recovery
+
+mod_names = ["HMM", "changepoint", "delta_rule", "p_hall","reduced_bayes",
+"reduced_bayes_lamda", "PID" , "Mixed_delta", "VKF", "HGF"]
+
+
+
+
+for key in mod_names:
+
+    if key  == "HMM":
+        seed = 123
+    elif key  == "changepoint":
+        seed = 124
+    elif key  == "delta_rule":
+        seed = 125
+    elif key  == "p_hall":
+       seed = 126
+    elif key == "reduced_bayes":
+        seed = 127
+    elif key == "reduced_bayes_lamda":
+        seed = 128
+    elif key == "PID":
+        seed = 129
+    elif key == "Mixed_delta":
+        seed = 130
+    elif key == "VKF":
+        seed = 131
+    elif key == "HGF":
+        seed = 132
+
+    
+    
+    niter = 1000
+    n_sessions =150
+    n_trials = 1000
+    model = key
+    
+    
+    # get stimulated paras
+    
+    mod_est, mod_paras, seqs, truep, seqs_index = da.stimulate_mod_data(model,niter,seed,n_sessions,n_trials,2)
+    
+ 
+    
+    df_seqs_index = pd.DataFrame(seqs_index)
+    
+    # Save to CSV
+    df_seqs_index.to_csv(f"results/para_recovery/{model}_seqs_index.csv")  
+    
+    
+    
+    # for HGF to handle bad traj
+    if model == "HGF":
+        nan_indices = [i for i, lst in enumerate(mod_est) if np.isnan(lst).any()]
+        
+        # Save the indices to a text file
+        np.savetxt("results/para_recovery/HGF_nan_indices.txt", nan_indices, fmt="%d")
+        
+        df = pd.DataFrame({
+            "nu": mod_paras[0],
+            "kappa": mod_paras[1],
+            "omega": mod_paras[2]})
+        
+        df.to_csv("results/para_recovery/HGF_whole_in.csv")
+        
+        # Remove the lists in mod_est that correspond to the nan_indices
+        mod_est = [lst for i, lst in enumerate(mod_est) if i not in nan_indices]
+
+        # Remove the corresponding values from each list in mod_paras at nan_indices
+        mod_paras = [np.delete(lst, nan_indices) for lst in mod_paras]
+        
+        seqs = [lst for i, lst in enumerate(seqs) if i not in nan_indices]
+        
+        
+    
+    
+    # get optimised paras
+    
+    # opt_res  = pr.get_optimised_result(niter,model,seqs,mod_est)
+    
+    opt_res  = da.pr_get_optimised_result(len(mod_est),model,seqs,mod_est)
+    
+    if model  == "changepoint":
+    
+        result_dict = {
+            "in": pd.DataFrame({
+                "T1": mod_paras[0],
+                "T2": mod_paras[1]
+            }),
+            "out": pd.DataFrame({
+                "T1": [arr[0] for arr in opt_res],
+                "T2": [arr[1] for arr in opt_res]
+            })
+        }
+    
+    elif model  == "HMM":
+        result_dict = {
+            "in": pd.DataFrame({
+                "p_c": mod_paras[0]
+            }),
+            "out": pd.DataFrame({
+                "p_c": [arr[0] for arr in opt_res]
+            })
+        }
+    elif model  == "delta_rule":
+        result_dict = {
+            "in": pd.DataFrame({
+                "lr": mod_paras[0]
+            }),
+            "out": pd.DataFrame({
+                "lr": [arr[0] for arr in opt_res]
+            })
+        }
+    elif model  == "p_hall":
+        result_dict = {
+            "in": pd.DataFrame({
+                "lr": mod_paras[0],
+                "w": mod_paras[1]
+            }),
+            "out": pd.DataFrame({
+                "lr": [arr[0] for arr in opt_res],
+                "w": [arr[1] for arr in opt_res]
+            })
+        }
+    elif model  == "reduced_bayes":
+        result_dict = {
+            "in": pd.DataFrame({
+                "p_c": mod_paras[0]
+            }),
+            "out": pd.DataFrame({
+                "p_c": [arr[0] for arr in opt_res]
+            })
+        }
+    elif model  == "reduced_bayes_lamda":
+        result_dict = {
+            "in": pd.DataFrame({
+                "p_c": mod_paras[0],
+                "lamda": mod_paras[1]
+            }),
+            "out": pd.DataFrame({
+                "p_c": [arr[0] for arr in opt_res],
+                "lamda": [arr[1] for arr in opt_res]
+            })
+        }
+    elif model  == "PID":
+        result_dict = {
+            "in": pd.DataFrame({
+                "Kp": mod_paras[0],
+                "Ki": mod_paras[1],
+                "Kd": mod_paras[2],
+                "lamda": mod_paras[3]
+            }),
+            "out": pd.DataFrame({
+                "Kp": [arr[0] for arr in opt_res],
+                "Ki": [arr[1] for arr in opt_res],
+                "Kd": [arr[2] for arr in opt_res],
+                "lamda": [arr[3] for arr in opt_res]
+            })
+        }
+        
+    elif model  == "Mixed_delta": 
+        result_dict = {
+            "in": pd.DataFrame({
+                "delta1": mod_paras[0],
+                "delta2": mod_paras[1],
+                "hRate": mod_paras[2],
+                "nu_p": mod_paras[3]
+            }),
+            "out": pd.DataFrame({
+                "delta1": [arr[0] for arr in opt_res],
+                "delta2": [arr[1] for arr in opt_res],
+                "hRate": [arr[2] for arr in opt_res],
+                "nu_p": [arr[3] for arr in opt_res]
+            })
+        }
+        
+        
+    elif model  == "VKF": 
+        result_dict = {
+            "in": pd.DataFrame({
+                "lamda": mod_paras[0],
+                "omega": mod_paras[1],
+                "v0": mod_paras[2]
+            }),
+            "out": pd.DataFrame({
+                "lamda": [arr[0] for arr in opt_res],
+                "omega": [arr[1] for arr in opt_res],
+                "v0": [arr[2] for arr in opt_res]
+            })
+        }
+        
+    elif model  == "HGF":
+        result_dict = {
+            "in": pd.DataFrame({
+                "nu": mod_paras[0],
+                "kappa": mod_paras[1],
+                "omega": mod_paras[2]
+            }),
+            "out": pd.DataFrame({
+                "nu": [arr[0] for arr in opt_res],
+                "kappa": [arr[1] for arr in opt_res],
+                "omega": [arr[2] for arr in opt_res]
+            })
+        }
+            
+      
+    
+    for key, df in result_dict.items():
+        df.to_csv(f"results/para_recovery/{model}_{key}.csv", index=False)
+    
+    
+        
+#%% cv-MSE by session in Gallistel and Khaw dataset
+      
+    
+def get_cv_folds(data, n_folds=5):
+    
+    n = len(data)
+    base_fold_size = n // n_folds
+    extra = n % n_folds  # leftovers to add to the last fold
+
+    folds = []
+    start = 0
+    for i in range(n_folds):
+        # last fold takes the extra trials
+        end = start + base_fold_size + (1 if i == n_folds - 1 and extra > 0 else 0)
+        test_idx = np.arange(start, end)
+        train_idx = np.setdiff1d(np.arange(n), test_idx)
+        folds.append({'train_idx': train_idx, 'test_idx': test_idx})
+        start = end
+
+    return folds    
+
+G_folds = get_cv_folds(G_dat["outcome"][0][0])
+
+K_folds = get_cv_folds(Khaw_dat["outcome"][0][0])
+
+    
+  
+mod_names = ["HMM", "PID", "Mixed_delta"]
+
+G_cv_paras = {}
+
+G_cv_test= {}
+G_cv_test_sum = {}
+
+
+K_cv_paras = {}
+
+K_cv_test= {}
+K_cv_test_sum = {}
+
+
+for key in mod_names:
+    
+    
+    G_cv_paras[key] = []
+
+    G_cv_test[key] = []
+    G_cv_test_sum[key] = []
+    
+
+    K_cv_paras[key] = []
+
+    K_cv_test[key] = []
+    K_cv_test_sum[key] = []
+    
+    
+    
+    
+    model_idx = key
+
+
+    
+    t_start_cv = time()
+    
+    # training
+    # Loop through subjects
+    for subji in range(G_subj_n):
+        
+        print(f"cv - model: {key}, subj: {subji}")
+        
+        expID = 1
+        
+        # Initialize lists for the current subject
+      
+        subject_paras = []
+        subject_cv_test = []
+
+    
+        # Loop through sessions
+        for sessi in range(len(G_all_sess)):
+            
+            sess_paras = []
+            
+            sess_cv_test = []
+            
+            for trial_i in range(len(G_folds)):
+                
+                ## training
+                
+                train_index = G_folds[trial_i]['train_idx']
+                
+                outcome = G_dat["outcome"][subji][sessi][train_index]
+                
+                sub_est = G_dat["sub_est"][subji][sessi][train_index]
+                
+                
+                result, x_min, fval = da.get_optimised_result_trial(model_idx,outcome,sub_est,expID)
+        
+                # Store the results for the current session
+         
+                sess_paras.append(x_min)
+                
+                ## testing
+                
+                test_index = G_folds[trial_i]['test_idx']
+                
+                paras = x_min
+                
+                data_seq = G_dat["outcome"][subji][sessi][test_index]
+                estimate = G_dat["sub_est"][subji][sessi][test_index]
+            
+                sess_MSE = da.MSE_fun_trial(paras,data_seq,estimate,model_idx,expID)
+                
+                sess_cv_test.append(sess_MSE)
+                
+                
+                
+
+            subject_paras.append(sess_paras)
+            subject_cv_test.append(sess_cv_test)
+            
+
+        # Append the subject-specific results to the main lists
+       
+        G_cv_paras[key].append(subject_paras)
+        G_cv_test[key].append(subject_cv_test)
+        
+        # Sum across folds for each session
+        subject_cv_test_sum = [np.sum(sess_cv) for sess_cv in subject_cv_test]
+
+        # Store the subject's test MSE sums
+        G_cv_test_sum[key].append(subject_cv_test_sum)
+        
+        
+    print(f"cv - model: {key} finished")   
+    
+    # training
+    # Loop through subjects
+    for subji in range(K_subj_n):
+        
+        print(f"cv - model: {key}, subj: {subji}")
+        
+        expID = 2
+        
+        # Initialize lists for the current subject
+      
+        subject_paras = []
+        subject_cv_test = []
+
+    
+        # Loop through sessions
+        for sessi in range(len(K_all_sess)):
+            
+            sess_paras = []
+            
+            sess_cv_test = []
+            
+            for trial_i in range(len(K_folds)):
+                
+                ## training
+                
+                train_index = K_folds[trial_i]['train_idx']
+                
+                outcome = Khaw_dat["outcome"][subji][sessi][train_index]
+                
+                sub_est = Khaw_dat["sub_est"][subji][sessi][train_index]
+                
+                
+                result, x_min, fval = da.get_optimised_result_trial(model_idx,outcome,sub_est,expID)
+        
+                # Store the results for the current session
+         
+                sess_paras.append(x_min)
+                
+                ## testing
+                
+                test_index = K_folds[trial_i]['test_idx']
+                
+                paras = x_min
+                
+                data_seq = Khaw_dat["outcome"][subji][sessi][test_index]
+                estimate = Khaw_dat["sub_est"][subji][sessi][test_index]
+            
+                sess_MSE = da.MSE_fun_trial(paras,data_seq,estimate,model_idx,expID)
+                
+                sess_cv_test.append(sess_MSE)
+                
+                
+                
+
+            subject_paras.append(sess_paras)
+            subject_cv_test.append(sess_cv_test)
+            
+
+        # Append the subject-specific results to the main lists
+       
+        K_cv_paras[key].append(subject_paras)
+        K_cv_test[key].append(subject_cv_test)
+        
+        # Sum across folds for each session
+        subject_cv_test_sum = [np.sum(sess_cv) for sess_cv in subject_cv_test]
+
+        # Store the subject's test MSE sums
+        K_cv_test_sum[key].append(subject_cv_test_sum)
+        
+    print(f"cv - model: {key} finished") 
+
+
+## save data 
+
+# Assuming G_cv_test and G_cv_test_sum have already been populated
+
+for key in mod_names:
+    # Prepare a list to store cv_test data for this model
+    cv_test_data = []
+    cv_test_sum_data = []
+    
+    # Loop through subjects and prepare the data
+    for subji in range(G_subj_n):
+        # For cv_test, create a row of session_fold for each subject
+        cv_test_row = []
+        
+        for sessi in range(len(G_all_sess)):  # Loop through sessions
+            for trial_i in range(len(G_folds)):  # Loop through folds
+                # Get the MSE for current fold, session, and subject
+                cv_test_row.append(G_cv_test[key][subji][sessi][trial_i])
+        
+        # For cv_test_sum, sum across folds for each session
+        cv_test_sum_row = G_cv_test_sum[key][subji]
+        
+        # Add the rows to their respective lists
+        cv_test_data.append(cv_test_row)
+        cv_test_sum_data.append(cv_test_sum_row)
+    
+    # Convert the lists to DataFrames
+    # For cv_test, the columns will be of the form "session_fold" (e.g., "0_0", "0_1", ...)
+    columns_cv_test = [f"{sessi}_{fold}" for sessi in range(len(G_all_sess)) for fold in range(len(G_folds))]
+    df_cv_test = pd.DataFrame(cv_test_data, columns=columns_cv_test)
+    
+    # For cv_test_sum, the columns will be the session number (e.g., "0", "1", ...)
+    df_cv_test_sum = pd.DataFrame(cv_test_sum_data, columns=[str(sessi) for sessi in range(len(G_all_sess))])
+    
+    # Save the DataFrames to CSV
+    df_cv_test.to_csv(f"results/cv_MSE_by_subj_sess/G_{key}_cv_test.csv", index=False)
+    df_cv_test_sum.to_csv(f"results/cv_MSE_by_subj_sess/G_{key}_cv_test_sum.csv", index=False)      
+    
+print("saved results")
+
+
+for key in mod_names:
+    # Prepare a list to store cv_test data for this model
+    cv_test_data = []
+    cv_test_sum_data = []
+    
+    # Loop through subjects and prepare the data
+    for subji in range(K_subj_n):
+        # For cv_test, create a row of session_fold for each subject
+        cv_test_row = []
+        
+        for sessi in range(len(K_all_sess)):  # Loop through sessions
+            for trial_i in range(len(K_folds)):  # Loop through folds
+                # Get the MSE for current fold, session, and subject
+                cv_test_row.append(K_cv_test[key][subji][sessi][trial_i])
+        
+        # For cv_test_sum, sum across folds for each session
+        cv_test_sum_row = K_cv_test_sum[key][subji]
+        
+        # Add the rows to their respective lists
+        cv_test_data.append(cv_test_row)
+        cv_test_sum_data.append(cv_test_sum_row)
+    
+    # Convert the lists to DataFrames
+    # For cv_test, the columns will be of the form "session_fold" (e.g., "0_0", "0_1", ...)
+    columns_cv_test = [f"{sessi}_{fold}" for sessi in range(len(K_all_sess)) for fold in range(len(K_folds))]
+    df_cv_test = pd.DataFrame(cv_test_data, columns=columns_cv_test)
+    
+    # For cv_test_sum, the columns will be the session number (e.g., "0", "1", ...)
+    df_cv_test_sum = pd.DataFrame(cv_test_sum_data, columns=[str(sessi) for sessi in range(len(K_all_sess))])
+    
+    # Save the DataFrames to CSV
+    df_cv_test.to_csv(f"results/cv_MSE_by_subj_sess/K_{key}_cv_test.csv", index=False)
+    df_cv_test_sum.to_csv(f"results/cv_MSE_by_subj_sess/K_{key}_cv_test_sum.csv", index=False)      
+    
+
+print("saved results")      
+
+
+
+
+
+
