@@ -1,4 +1,10 @@
-# created by @emilebdn on 2025/04/30
+"""
+This module defines configuration variables for GRU modeling, HMM modeling, 
+and simulating subjects' behavior in adaptive learning tasks. 
+
+Author: @emilebdn  
+Created date: 2025-04-30
+"""
 
 n_jobs = 40
 

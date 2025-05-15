@@ -1,4 +1,11 @@
-# created by @emilebdn on 2025/04/30
+"""
+This script provides functions for generating sequences, fitting HMM models to real subjects' data, 
+and simulating subjects' behavior in adaptive learning tasks. It includes utilities for both 
+magnitude learning and probability learning tasks.
+
+Author: @emilebdn  
+Created date: 2025-04-30
+"""
 
 #%%
 import sys

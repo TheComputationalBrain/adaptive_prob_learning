@@ -1,3 +1,9 @@
+"""
+This script implements a simple RNN-based recurrent neural network for sequence prediction tasks. 
+
+Author: @emilebdn  
+Created date: 2025-04-15
+"""
 # created by @emilebdn on 2025/04/15
 
 import torch.nn as nn

@@ -1,4 +1,10 @@
-# Created on 2025/04/28 - @emilebdn
+"""
+This script preprocesses outcome-level data by excluding specific subjects 
+and saves the cleaned dataset for further analysis. 
+
+Author: @emilebdn  
+Created date: 2025-04-28
+"""
 
 #%%
 import os.path as op
@@ -7,7 +13,6 @@ import pandas as pd
 from datetime import datetime
 from paths import computed_data_emile_path, data_outcome_level_path
 
-# Dynamically generate today's date
 today_date = datetime.now().strftime('%Y%m%d')
 
 data_outcome_level = pd.read_csv(data_outcome_level_path)

@@ -1,4 +1,11 @@
-# created on 2025/03/22
+"""
+This script defines paths for accessing and preprocessing outcome-level data, 
+accessing already completed analyses and simulation data.
+
+Author: @emilebdn  
+Created date: 2025-03-22
+"""
+
 import os
 import os.path as op
 

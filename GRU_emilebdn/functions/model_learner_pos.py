@@ -1,5 +1,10 @@
-### imported from analysis/model_learner_pos.py - by emilebdn on 2025-05-13
-### imported from https://github.com/cedricfoucault/ada-learn/tree/main:
+"""
+This code simulates subjects' behavior using a Hidden Markov Model (HMM) 
+for the magnitude task. It is sourced from https://github.com/cedricfoucault/ada-learn/tree/main - analysis/model_learner_pos.py. The corresponding published paper reference is:
+
+Imported on 2025-05-13 by @emilebdn.
+"""
+
 """
     Two determinants of dynamic adaptive learning for magnitudes and probabilities
     Cédric Foucault, and Florent Meyniel

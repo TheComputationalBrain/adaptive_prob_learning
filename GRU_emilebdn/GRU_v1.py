@@ -56,4 +56,16 @@ all_results_df = pd.DataFrame.from_dict(all_results, orient='index')
 all_results_df.to_csv(output_path)
 
 print(f"Results saved to {output_path}")
+
+# %%
+data_type = 'experiment'
+task = 'ada-pos'
+subject_labeling = True
+hidden_size = best_GRU_hidden_layer_sizes[task]
+
+sequences = import_sequences(task, data_type, subject_labeling=subject_labeling)
+train_sequences, test_sequences = split_sequences(sequences, train_size_ratio)
+results = train_and_evaluate_gru(train_sequences, test_sequences, hidden_size=hidden_size)
+print(f"Task: {task}, Training time: {results['training_time']}, Test loss: {results['test_loss']}, Explained Variance: {results['evf']}")
+
 # %%

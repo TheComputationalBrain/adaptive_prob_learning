@@ -1,7 +1,13 @@
-# created 20250505
+"""
+This module provides functions for processing sequences, training GRU models, 
+and evaluating their performance in adaptive learning tasks. It includes utilities 
+for data preparation, cross-validation, and hyperparameter tuning.
+
+Author: @emilebdn  
+Created date: 2025-05-05
+"""
 
 #%%
-
 import time
 import torch
 
@@ -19,24 +25,39 @@ from sklearn.metrics import explained_variance_score
 from sklearn.model_selection import KFold
 from torch.utils.data import DataLoader
 
-from models.GRU_simple_RNN import SimpleRNN
-from config.paths import computed_data_emile_path, data_outcome_level_preprocessed_path, data_outcome_level_simulated_path
-from config.variables import n_jobs, train_size_ratio, input_size, hidden_size, max_hidden_size, output_size, learning_rate, num_epochs, batch_size
+if __name__ == "__main__":
+    from GRU_emilebdn.models.GRU_simple_RNN import SimpleRNN
+    from GRU_emilebdn.config.paths import computed_data_emile_path, data_outcome_level_preprocessed_path, data_outcome_level_simulated_path
+    from GRU_emilebdn.config.variables import n_jobs, train_size_ratio, input_size, hidden_size, max_hidden_size, output_size, learning_rate, num_epochs, batch_size
+else:
+    from models.GRU_simple_RNN import SimpleRNN
+    from config.paths import computed_data_emile_path, data_outcome_level_preprocessed_path, data_outcome_level_simulated_path
+    from config.variables import n_jobs, train_size_ratio, input_size, hidden_size, max_hidden_size, output_size, learning_rate, num_epochs, batch_size
 
 today_date = datetime.now().strftime("%Y%m%d")
 
 #%%
-def import_sequences(task, data_type):
+def import_sequences(task, data_type, subject_labeling=False):
     # Load the dataset
     if data_type == 'experiment':
+        if subject_labeling:
+            groupby_variables = ['session_idx', 'sequence_id']
+        else:
+            groupby_variables = ['subject', 'session_idx', 'sequence_id']
+        
         data_outcome_level = pd.read_csv(data_outcome_level_preprocessed_path)
         data_outcome_level_filtered = data_outcome_level[data_outcome_level['task'] == task]
-        grouped = data_outcome_level_filtered.groupby(['subject', 'session_idx', 'sequence_id'])
+        grouped = data_outcome_level_filtered.groupby(groupby_variables)
     
     if data_type == 'simulation':
+        if subject_labeling:
+            groupby_variables = ['sequence_id']
+        else:
+            groupby_variables = ['subject', 'sequence_id']
+
         data_outcome_level_simulated = pd.read_csv(data_outcome_level_simulated_path)
         data_outcome_level_simulated_filtered = data_outcome_level_simulated[data_outcome_level_simulated['task'] == task]
-        grouped = data_outcome_level_simulated_filtered.groupby(['subject', 'sequence_id'])
+        grouped = data_outcome_level_simulated_filtered.groupby(groupby_variables)
 
     sequences = []
 
@@ -92,7 +113,7 @@ def split_sequences_for_cv(sequences, n_splits):
 
 #%%
 def train_and_evaluate_gru(train_sequences, test_sequences, input_size=input_size, hidden_size=hidden_size, \
-                           output_size=output_size, learning_rate=learning_rate, num_epochs=num_epochs, batch_size=batch_size):
+                           output_size=output_size, learning_rate=learning_rate, num_epochs=num_epochs, batch_size=batch_size, subject_labeling=False):
     """
     Train and evaluate a GRU-based RNN for sequence prediction.
 
@@ -228,14 +249,14 @@ def plot_results(task, results_df):
     plt.tight_layout()  # Adjust layout to prevent overlap
     plt.show()
 
-def find_best_GRU_hidden_layer_size(task, data_type, train_size_ratio=train_size_ratio, max_hidden_size=max_hidden_size, n_jobs=n_jobs):
+def find_best_GRU_hidden_layer_size(task, data_type, train_size_ratio=train_size_ratio, max_hidden_size=max_hidden_size, n_jobs=n_jobs, subject_labeling=False):
     # Generate hidden layer sizes dynamically: [1, 2, 4, ..., max_hidden_size]
     hidden_layer_sizes = [2**i for i in range(1, int(np.log2(max_hidden_size)))]
 
     # Cross-validation setup
     n_splits = int(1 / (1-train_size_ratio))
     
-    sequences = import_sequences(task, data_type)
+    sequences = import_sequences(task, data_type, subject_labeling)
     cross_val_splits = split_sequences_for_cv(sequences, n_splits)
 
     results = Parallel(n_jobs=n_jobs)(

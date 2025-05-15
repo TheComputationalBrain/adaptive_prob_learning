@@ -1,4 +1,11 @@
-# created on 2025/03/22
+"""
+This script simulates subjects' behavior using a Hidden Markov Model (HMM) for sequence prediction tasks. 
+It includes loading pre-fitted parameters, assigning sequences, simulating behavior, and saving the results 
+to a CSV file.
+
+Author: @emilebdn  
+Created date: 2025-03-22
+"""
 
 #%%
 import sys
