@@ -28,7 +28,7 @@ from models.Mixed_delta import mixed_delta,update_mixed_delta
 from models.VKF import VKF, update_VKF
 from models.HGF import HGF, update_HGF
 
-from GRU_emilebdn.config.paths import data_outcome_level_path, data_path
+from emilebdn.config.paths import data_outcome_level_path, data_path
 computer = os.uname()[1]
 
 #%%
@@ -377,7 +377,6 @@ def fit_model(expID, model, subjidx, sessions):
     
     return result, x_min, fval 
 
-
 # def likelihood_fun(pars,data,expID):
 #     sigma_resp = pars[0] # response noise
     
@@ -437,7 +436,7 @@ def fit_model(expID, model, subjidx, sessions):
 
 
 
-def MSE_fun(pars,data,expID,model):
+def MSE_fun(pars,data,expID,model, return_pred=False):
     
       
     if model =="HMM":
@@ -520,10 +519,10 @@ def MSE_fun(pars,data,expID,model):
     mse = sse / len(predicted_response)  
     
     # rmse = np.sqrt(mse)
-        
+    
     return mse
     
-  
+
 
 
 def get_initial_parameters(data,expID,model):
@@ -584,8 +583,6 @@ def get_initial_parameters(data,expID,model):
         ub = np.array([8, 17, 1, 5])
         
         bounds = [(1.01, 8), (1.01, 17),(0, 1),(0, 5)]
-        
-    
         
     elif model == "VKF":
         # VKF: lamda,omega,v0
