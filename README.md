@@ -1,6 +1,6 @@
 # adaptive_prob_learning
 
-This repository provide all code used to generate plots and results of the manuscript "Sophistication of Human Adaptive Probability Learning‬
+This repository provide all code used to generate plots and results of the paper "Sophistication of Human Adaptive Probability Learning‬
 ‭ in Dynamic Environments".
 
 The data folder contains the three datasets we used in the paper.
