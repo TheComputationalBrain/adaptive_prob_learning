@@ -28,7 +28,6 @@ from emilebdn.config.variables import (
     n_jobs,
     task_types,
     train_size_ratio,
-    input_size,
     best_GRU_hidden_layer_sizes,
     subject_embedding_dim
 )
@@ -38,7 +37,6 @@ from emilebdn.GRU.GRU_functions import (
     process_subject,
     split_sequences_for_cv,
     train_and_evaluate_gru,
-    train_and_evaluate_subject_gru
 )
 
 today = datetime.datetime.now().strftime("%Y%m%d")
@@ -197,67 +195,3 @@ for task in task_types:
     results_path = op.join(computed_data_emile_path, model, model_config, data, results_filename)
     results_df.to_csv(results_path, index=False)
     print(f"Saved group GRU fit results to: {results_path}")
-
-##########################################################################################
-# %% Section 4 — Train Subject-wise GRU 
-print("\n=== Section 4: Subject-wise GRU Training ===")
-
-model = 'GRU'
-use_subject_embedding = True
-model_config = 'subject'
-subject_embedding_dim = subject_embedding_dim #not influencing the fitting
-best_GRU_hidden_layer_size = 1024
-data = 'experiment'
-data_path = data_outcome_level_preprocessed_path
-task_types = ['ada-pos', 'ada-prob']
-content = 'evf_scores'
-
-print("model:", model)
-print("model_config:", model_config)
-print("best_GRU_hidden_layer_size:", best_GRU_hidden_layer_size)
-print("data:", data)
-print("data_path:", data_path)
-print("task_types:", task_types)
-print("content:", content)
-
-path = data_outcome_level_preprocessed_path
-
-all_flat_results = {}
-
-for task in task_types:
-    sequences = import_sequences(data, path, task, use_subject_embedding)[0]
-    subject_ids = sorted(set(seq[2] for seq in sequences))
-
-    subjects_sequences = {subject_id: [seq for seq in sequences if seq[2] == subject_id] for subject_id in subject_ids}
-
-    results = Parallel(n_jobs=n_jobs)(delayed(train_and_evaluate_subject_gru)(subjects_sequences[subject_id], subject_id, data, task, train_size_ratio, \
-                                                             input_size, best_GRU_hidden_layer_size, use_subject_embedding) for subject_id in subject_ids)
-    
-    for subject_id, result in results:
-        all_flat_results[(task, subject_id)] = result
-
-results_df = pd.DataFrame.from_dict(all_flat_results, orient='index').reset_index(drop=True)
-# results_df = results_df[['data', 'task', 'hidden_size', 'subject_id', 'training_time', 'test_loss', 'explained_variance']]
-
-results_path = op.join(computed_data_emile_path, model, model_config, data, \
-                                 f"{today}_{model}_{model_config}_{data}_{content}.csv")
-results_df.to_csv(results_path, index=False)
-print(f"Saved subject-wise GRU results to: {results_path}")
-
-# Compute min, max, mean, and std for explained variance fractions (evfs) separately for each task
-evf_col = 'explained_variance_fraction'
-stats_list = []
-for task in results_df['task'].unique():
-    evfs = results_df[results_df['task'] == task][evf_col]
-    evf_stats = {
-        'task': task,
-        'min_evf': evfs.min(),
-        'max_evf': evfs.max(),
-        'mean_evf': evfs.mean(),
-        'std_evf': evfs.std()
-    }
-    stats_list.append(evf_stats)
-evf_stats_df = pd.DataFrame(stats_list)
-evf_stats_path = results_path.replace('.csv', '_stats.csv')
-evf_stats_df.to_csv(evf_stats_path, index=False)
-print(f"Saved explained variance stats to: {evf_stats_path}")

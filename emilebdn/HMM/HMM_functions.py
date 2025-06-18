@@ -31,6 +31,7 @@ from emilebdn.config.variables import (
 from models.HMM_fit import HMM
 
 #%%
+### Predict subject behavior with HMM(p_c)
 def HMM_prediction(p_c, data, task, expID, b_0, tau_0, std_dev_pos, return_MSE=False):
     """
     Computes the mean squared error (MSE) or returns HMM model predictions.
@@ -97,6 +98,8 @@ def HMM_prediction(p_c, data, task, expID, b_0, tau_0, std_dev_pos, return_MSE=F
     else:
         return predictions
 
+#%%
+### Fit HMM parameter (p_c) for subjects
 def get_initial_parameters_new(data, expID, model, task, p_c_bounds, b_0, tau_0, n_initial_guesses, std_dev_pos):
     """
     Generates a good initial guess for model parameters by random search minimizing MSE,
@@ -286,79 +289,91 @@ def fit_HMM_for_every_subject(data_outcome_level, task, n_jobs=n_jobs, expID=exp
     # If p_c_fitted is a list/array with a single value, extract the value
     p_c_fitted_values = [pc_min[0] if isinstance(pc_min, (np.ndarray, list)) else pc_min \
                      for _, pc_min, _ in p_c_fitted]
-
     
     return dict(zip(subjects, p_c_fitted_values))
 
-def compute_evf_for_subject(subject_id, subject_data, task, n_splits):
+#%%
+### Fit HMM parameter (p_c) on training sequences and use it to predict subject behavior on test sequences
+
+def predict_sequences_with_HMM(train_sequences, test_sequences, task, subj_idx=0):
     """
-    Compute the Explained Variance Score (EVF) for a single subject using cross-validation.
+    Fits HMM on train_sequences and predicts outcomes for test_sequences.
+    Returns: predictions (array)
+    """
+    # Fit HMM
+    p_c_min = fit_HMM_for_each_subject(
+        subj_idx=subj_idx,
+        subject_data=train_sequences,
+        task=task,
+        expID=expID,
+        model=model,
+        p_c_bounds=p_c_bounds,
+        b_0=b_0,
+        tau_0=tau_0,
+        n_initial_guesses=n_initial_guesses,
+        std_dev_pos=std_dev_pos,
+    )[1]
+
+    # Remove the 'estimate' column from test_sequences if it exists, to ensure the target is not used in prediction
+    if 'estimate' in test_sequences.columns:
+        test_sequences = test_sequences.drop(columns=['estimate'])
+    
+    # Predict outcomes on test set
+    predictions = HMM_prediction(
+        p_c=p_c_min,
+        data=test_sequences,
+        task=task,
+        expID=expID,
+        b_0=b_0,
+        tau_0=tau_0,
+        std_dev_pos=std_dev_pos,
+        return_MSE=False
+    )
+
+    return predictions
+
+#%%
+### Cross-validation utilities for HMM model evaluation
+def compute_mse_evf_for_subject(subject_id, subject_data, task, n_splits):
+    """
+    Compute the Explained Variance Fraction (EVF) and MSE for a single subject using cross-validation.
+    Returns a tuple: (mean_mse, mean_evf)
     """
     kf = KFold(n_splits=n_splits)
     evf_scores = []
+    mse_scores = []
 
-    for train_index, test_index in kf.split(subject_data):
-        train_data = subject_data.iloc[train_index]
-        test_data = subject_data.iloc[test_index]
+    for train_idx, test_idx in kf.split(subject_data):
+        train_data = subject_data.iloc[train_idx]
+        test_data = subject_data.iloc[test_idx]
 
-        # Fit HMM model
-        p_c_min = fit_HMM_for_each_subject(
-            subj_idx=subject_id,
-            subject_data=train_data,
-            task=task,
-            expID=expID,
-            model=model,
-            p_c_bounds=p_c_bounds,
-            b_0=b_0,
-            tau_0=tau_0,
-            n_initial_guesses=n_initial_guesses,
-            std_dev_pos=std_dev_pos,
-        )[1]
+        preds = predict_sequences_with_HMM(train_data, test_data, task, subj_idx=subject_id)
+        mse_scores.append(np.mean((test_data['outcome'].values - preds) ** 2))
+        evf_scores.append(explained_variance_score(test_data['outcome'], preds))
 
-        # Predict on test set
-        predictions = HMM_prediction(
-            p_c=p_c_min,
-            data=test_data,
-            task=task,
-            expID=expID,
-            b_0=b_0,
-            tau_0=tau_0,
-            std_dev_pos=std_dev_pos,
-            return_MSE=False
-        )
+    return np.mean(mse_scores), np.mean(evf_scores)
 
-        evf = explained_variance_score(test_data['outcome'], predictions)
-        evf_scores.append(evf)
-
-    return np.mean(evf_scores)
-
-def compute_evf_for_all_subjects(data_outcome_level, task, n_splits=int(1/(1-train_size_ratio))):
+def compute_mse_evf_for_all_subjects(data_outcome_level, task, n_splits=int(1/(1-train_size_ratio))):
     """
-    Compute evf for all subjects using cross-validation.
+    Compute mse and evf for all subjects using cross-validation.
     """
     if task not in task_types:
         raise ValueError(f"Task must be one of: {task_types}")
-        
+
     task_data = data_outcome_level[data_outcome_level['task'] == task]
     subjects = task_data['subject'].unique()
+    subjects_id = {subject: idx for idx, subject in enumerate(subjects)}
+    subjects_data = {subject: task_data[task_data['subject'] == subject] for subject in subjects}
 
-    subjects_id = {
-        subject: idx
-        for idx, subject in enumerate(subjects)
-    }
-
-    subjects_data = {
-        subject: task_data[task_data['subject'] == subject]
-        for subject in subjects
-    }
-
-    evf_scores = {}
     results = Parallel(n_jobs=n_jobs)(
-        delayed(compute_evf_for_subject)(subjects_id[subject], subjects_data[subject], task, n_splits)
+        delayed(compute_mse_evf_for_subject)(
+            subjects_id[subject], subjects_data[subject], task, n_splits
+        )
         for subject in subjects
     )
 
-    for subject, evf in zip(subjects, results):
-        evf_scores[subject] = evf
+    mse_scores = {subject: res[0] for subject, res in zip(subjects, results)}
+    evf_scores = {subject: res[1] for subject, res in zip(subjects, results)}
+    return mse_scores, evf_scores
 
-    return evf_scores
+# %%

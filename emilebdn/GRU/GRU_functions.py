@@ -36,7 +36,7 @@ from emilebdn.config.variables import n_jobs, nb_subjects, train_size_ratio, inp
 today = datetime.now().strftime("%Y%m%d")
 
 #%%
-def import_sequences(data_type, path, task, use_subject_embedding=False):
+def import_sequences(data, path, task, use_subject_embedding=False):
     """
     Import sequences from experimental or simulated data and optionally attach subject labels.
 
@@ -50,16 +50,9 @@ def import_sequences(data_type, path, task, use_subject_embedding=False):
         sequences (list): List of (input_seq, target_seq[, subject_id]).
         num_subjects (int, optional): Number of unique subjects (only if use_subject_embedding=True).
     """
+    data = pd.read_csv(path)
 
-    if data_type == 'experiment':
-        groupby_variables = ['subject', 'session_idx', 'sequence_id']
-        data = pd.read_csv(path)
-    elif data_type == 'simulation':
-
-        groupby_variables = ['subject', 'sequence_id']
-        data = pd.read_csv(path)
-    else:
-        raise ValueError("data_type must be 'experiment' or 'simulation'")
+    groupby_variables = ['subject', 'session_idx', 'sequence_id']
 
     # Filter the data to only the specified task
     data_filtered = data[data['task'] == task]
@@ -131,7 +124,8 @@ def split_sequences_for_cv(sequences, n_splits):
 #%%
 def train_and_evaluate_gru(train_sequences, test_sequences, input_size=input_size, hidden_size=hidden_size, \
                            output_size=output_size, learning_rate=learning_rate, num_epochs=num_epochs, \
-                           batch_size=batch_size, use_subject_embedding=False, subject_embedding_dim=subject_embedding_dim):
+                           batch_size=batch_size, use_subject_embedding=False, \
+                            subject_embedding_dim=subject_embedding_dim, return_pred=False):
     """
     Train and evaluate a GRU-based RNN for sequence prediction.
 
@@ -267,11 +261,14 @@ def train_and_evaluate_gru(train_sequences, test_sequences, input_size=input_siz
 
     evf = explained_variance_score(all_targets, all_predictions)
 
-    return {
-        "training_time": training_time,
-        "test_loss": test_loss / len(test_loader),
-        "evf": evf
-    }
+    if return_pred:
+        return all_predictions
+    else:
+        return {
+            "training_time": training_time,
+            "test_loss": test_loss / len(test_loader),
+            "evf": evf
+        }
 
 # # Plot predictions vs. ground truth for a few sequences
 # with torch.no_grad():

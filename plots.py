@@ -1,5 +1,5 @@
 
-
+#%%
 import os
 import sys
 import pandas as pd
@@ -229,7 +229,7 @@ plt.show()
 #%% Figure 4
 
 
-## get ideal HMM esitamte 
+## get ideal HMM estimate 
 
 mod_names = ["HMM_ideal"]
 
