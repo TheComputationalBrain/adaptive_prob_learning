@@ -347,7 +347,7 @@ for key in mod_names:
     print(f"DONE IN {key} CV {t_end_cv:0.3f} MIN.")
 
 
-# store cv reuslts 
+# store cv-MSE reuslts 
 
 mod_names = ["HMM", "changepoint", "delta_rule", "p_hall","reduced_bayes",
                   "reduced_bayes_lamda", "PID" , "Mixed_delta", "VKF", "HGF"]
