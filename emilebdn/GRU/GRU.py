@@ -7,7 +7,7 @@ It includes hyperparameter tuning, subject-wise and group-level evaluation on si
 Author: @emilebdn
 Created date: 2025-04-15
 """
-# %%
+#%%
 import datetime
 import sys
 
@@ -17,7 +17,7 @@ import pandas as pd
 from joblib import Parallel, delayed
 
 # Add the root of the repository to sys.path
-sys.path.append(op.dirname(op.dirname(op.dirname(op.abspath(__file__)))))
+sys.path.append(op.dirname(op.dirname(op.dirname(__file__))))
 
 from emilebdn.config.paths import (
     computed_data_emile_path,
@@ -42,7 +42,7 @@ from emilebdn.GRU.GRU_functions import (
 today = datetime.datetime.now().strftime("%Y%m%d")
 
 ##########################################################################################
-# %% Section 1 — Grid Search on Simulated Data (Group-level)
+#%% Section 1 — Grid Search on Simulated Data (Group-level)
 print("=== Section 1: Group-level Grid Search for hidden_layer_size ===")
 
 model = 'GRU'
@@ -92,7 +92,7 @@ best_hidden_sizes.to_csv(best_hidden_sizes_path, index=False)
 print(f"Saved best hidden sizes to: {best_hidden_sizes_path}")
 
 ##########################################################################################
-# %% Section 2 — Subject-wise Grid Search on Simulated Data
+#%% Section 2 — Subject-wise Grid Search on Simulated Data
 print("\n=== Section 2: Subject-wise Grid Search for hidden_layer_size ===")
 
 data = 'simulation'
@@ -140,7 +140,7 @@ summary_stats_df.to_csv(summary_stats_path, index=False)
 print(f"Saved best hidden sizes and summary stats for subject-wise results.")
 
 ##########################################################################################
-# %% Section 3 — Train Group GRU with or without subject embedding
+#%% Section 3 — Train Group GRU with or without subject embedding
 print("\n=== Section 3: Group-level GRU Training ===")
 
 model = 'GRU'

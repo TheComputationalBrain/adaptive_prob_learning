@@ -10,17 +10,19 @@ import os
 import pandas as pd
 import os.path as op
 
-computer = os.uname()[1]
-home_path = op.expanduser("~")
+root_dir = op.dirname(op.dirname(op.dirname(__file__)))
 
-project_path = op.join(home_path, 'nasShare', 'projects', 'protocols', 'AdaptiveProbLearning_ChungMeyniel_2025')
-data_path = op.join(project_path, \
-                    'data', 'Foucault_Meyniel_2024')
+data_outcome_level_path = op.join(root_dir, 'data', 'Foucault_Meyniel_2024', \
+                    'structured-dataset', 'ada-learn_study', 'data_outcome-level.csv')
 
-ada_learn_study_path = op.join(data_path, 'structured-dataset', 'ada-learn_study')
-data_outcome_level_path = op.join(ada_learn_study_path, 'data_outcome-level.csv')
+computed_data_emile_path = os.path.normpath(
+    os.path.join(
+        root_dir, '..', '..', 'ebayondenoyer', 'nasShare', \
+        'projects', 'protocols', 'AdaptiveProbLearning_ChungMeyniel_2025', \
+        'data', 'Foucault_Meyniel_2024', 'computed_data_emile'
+    )
+)
 
-computed_data_emile_path = op.join(data_path, 'computed_data_emile')
 data_outcome_level_preprocessed_path = op.join(computed_data_emile_path, 'data_outcome_level', \
                                                '20250515_data_outcome_level_preprocessed.csv')
 
@@ -57,4 +59,4 @@ data_outcome_level_simulated_path = op.join(computed_data_emile_path, 'data_outc
 
 # print("Inconsistent outcome sequences for same (session_idx, task):", inconsistent_outcomes)
 
-# %%
+#%%

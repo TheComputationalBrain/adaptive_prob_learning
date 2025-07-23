@@ -1,6 +1,7 @@
 
 #%%
 import os
+import os.path as op
 import sys
 import pandas as pd
 import numpy as np
@@ -28,8 +29,8 @@ from models.Mixed_delta import mixed_delta,update_mixed_delta
 from models.VKF import VKF, update_VKF
 from models.HGF import HGF, update_HGF
 
-from emilebdn.config.paths import data_outcome_level_path, data_path
 computer = os.uname()[1]
+root_dir = op.dirname(__file__)
 
 #%%
 
@@ -45,10 +46,7 @@ def load_data(dat):
         FM_subj_n = 96
         FM_all_sess = list(range(15))
         
-        if computer == 'LAPLACE':
-            data_outcomelevel = pd.read_csv(data_outcome_level_path)
-        else:
-            data_outcomelevel = pd.read_csv('data/Foucault_Meyniel_2024/structured-dataset/ada-learn_study/data_outcome-level.csv')
+        data_outcomelevel = pd.read_csv(op.join(root_dir, 'data/Foucault_Meyniel_2024/structured-dataset/ada-learn_study/data_outcome-level.csv'))
         
         data_outcomelevel = data_outcomelevel[data_outcomelevel['task'] != 'ada-pos']
 
@@ -58,11 +56,8 @@ def load_data(dat):
         # Find the rows within the specified index range and replace the 'subject' column
         data_outcomelevel.loc[data_outcomelevel.index.isin(index_range), 'subject'] = '604b169fe4b7991ec08da3a7'
 
-        if computer == 'LAPLACE':
-            data_outcomelevel_pliot = pd.read_csv(data_outcome_level_path)
-        else:
-            data_outcomelevel_pliot = pd.read_csv('data/Foucault_Meyniel_2024/structured-dataset/ada-learn_study/data_outcome-level.csv')
-
+        data_outcomelevel_pliot = pd.read_csv(op.join(root_dir, 'data/Foucault_Meyniel_2024/structured-dataset/ada-learn_study/data_outcome-level.csv'))
+        
         # This file describes the dataset of all the different outcome sequences
         # that were presented to subjects in our study
         # (100 sequences for ada-pos, 150 sequences for ada-prob).
@@ -71,10 +66,7 @@ def load_data(dat):
         # but with replacement at the group level).
         # As a result, each outcome sequence was presented multiple times across the subjects.
         
-        if computer == 'LAPLACE':
-            SEQ_DATA_FILE = pd.read_csv(os.path.join(data_path, 'seq-data', 'seq-data_pos-prob_ntrials-75_seed-1_nsessions-pos-100-prob-150_std-pos-10by300_pc-pos-1by10-prob-1by20_min-run-length-pos-3-prob-6_min-odd-change-prob-4_apply-min-for-last-run-length-prob_max-run-length-prob-60.csv'))
-        else:
-            SEQ_DATA_FILE = pd.read_csv('data/Foucault_Meyniel_2024/seq-data/seq-data_pos-prob_ntrials-75_seed-1_nsessions-pos-100-prob-150_std-pos-10by300_pc-pos-1by10-prob-1by20_min-run-length-pos-3-prob-6_min-odd-change-prob-4_apply-min-for-last-run-length-prob_max-run-length-prob-60.csv')
+        SEQ_DATA_FILE = pd.read_csv(op.join(root_dir, 'data/Foucault_Meyniel_2024/seq-data/seq-data_pos-prob_ntrials-75_seed-1_nsessions-pos-100-prob-150_std-pos-10by300_pc-pos-1by10-prob-1by20_min-run-length-pos-3-prob-6_min-odd-change-prob-4_apply-min-for-last-run-length-prob_max-run-length-prob-60.csv'))
         
         SEQ_DATA_FILE = SEQ_DATA_FILE[SEQ_DATA_FILE['taskName'] != 'ada-pos']
 

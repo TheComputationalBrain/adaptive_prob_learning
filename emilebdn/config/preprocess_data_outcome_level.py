@@ -13,10 +13,12 @@ import pandas as pd
 
 from datetime import datetime
 
-# Add the root of the repository to sys.path
-sys.path.append(op.dirname(op.dirname(op.dirname(op.abspath(__file__)))))
+sys.path.append(op.dirname(op.dirname(op.dirname(__file__))))
 
-from emilebdn.config.paths import computed_data_emile_path, data_outcome_level_path
+from emilebdn.config.paths import (
+    computed_data_emile_path, 
+    data_outcome_level_path
+)
 
 today = datetime.now().strftime('%Y%m%d')
 
@@ -37,4 +39,4 @@ data_outcome_level_preprocessed.to_csv(
             f'{today}_data_outcome_level_preprocessed.csv'), index=False
 )
 
-# %%
+#%%

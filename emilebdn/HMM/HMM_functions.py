@@ -9,6 +9,7 @@ import sys
 
 import numpy as np
 import os.path as op
+import pandas as pd
 import scipy.optimize as so
 
 from joblib import Parallel, delayed
@@ -16,23 +17,26 @@ from sklearn.metrics import explained_variance_score
 from sklearn.model_selection import KFold
 
 # Add the root of the repository to sys.path
-sys.path.append(op.dirname(op.dirname(op.dirname(op.abspath(__file__)))))
+sys.path.append(op.dirname(op.dirname(op.dirname(__file__))))
 
 import emilebdn.simulations.model_learner_pos as MP
 
+from data_analysis_utils import fit_model
+from emilebdn.config.paths import data_outcome_level_preprocessed_path
 from emilebdn.config.variables import (
     n_jobs,
     task_types, train_size_ratio,
     p_c_bounds,
     b_0, tau_0, n_initial_guesses,
     expID, model,
-    std_dev_pos
+    std_dev_pos,
+    change_prob_prob
 )
 from models.HMM_fit import HMM
 
 #%%
 ### Predict subject behavior with HMM(p_c)
-def HMM_prediction(p_c, data, task, expID, b_0, tau_0, std_dev_pos, return_MSE=False):
+def HMM_prediction(p_c, data, task, expID=expID, b_0=b_0, tau_0=tau_0, std_dev_pos=std_dev_pos, return_MSE=False):
     """
     Computes the mean squared error (MSE) or returns HMM model predictions.
     This function is inspired by data_analysis_utils.MSE_fun().
@@ -68,35 +72,63 @@ def HMM_prediction(p_c, data, task, expID, b_0, tau_0, std_dev_pos, return_MSE=F
         raise ValueError("Error: expID has to be 3 for the moment.")
     
     MSEs = []
-    predictions = np.array([], dtype=np.float64)
+    # predictions = np.array([], dtype=np.float64)
 
-    for _, group in data.groupby('session_idx'):
-        outcomes = group['outcome'].values
+    outcomes = data['outcome']
 
-        if task == 'ada-pos':
-            inference_result = MP.run_inference(
-                outcomes,
-                p_c=p_c,
-                std_gen=std_dev_pos,
-                b_0=b_0,
-                tau_0=tau_0
-            )
+    if len(outcomes) == 0:
+        raise ValueError("Error: 'outcomes' array is empty")
 
-            estimates = inference_result['mean']
+    # if task == 'ada-pos':
+    #     inference_result = MP.run_inference(
+    #         outcomes,
+    #         p_c=p_c,
+    #         std_gen=std_dev_pos,
+    #         b_0=b_0,
+    #         tau_0=tau_0
+    #     )
 
-        if task == 'ada-prob':
-            estimates = HMM(p_c,outcomes,expID)
+    #     estimates = inference_result['mean']
+
+    if task == 'ada-prob':
+        estimates = HMM(p_c,outcomes,expID)
+        
+    if return_MSE:
+        mse = np.mean((estimates - outcomes) ** 2)
+        MSEs.append(mse)
+    # else:
+    #     predictions = estimates
+
+    # for _, group in data.groupby('session_idx'):
+    #     outcomes = group['outcome'].values
+
+    #     if len(outcomes) == 0:
+    #         raise ValueError("Error: 'outcomes' array is empty for session_idx {}.".format(group['session_idx'].iloc[0]))
+
+    #     if task == 'ada-pos':
+    #         inference_result = MP.run_inference(
+    #             outcomes,
+    #             p_c=p_c,
+    #             std_gen=std_dev_pos,
+    #             b_0=b_0,
+    #             tau_0=tau_0
+    #         )
+
+    #         estimates = inference_result['mean']
+
+    #     if task == 'ada-prob':
+    #         estimates = HMM(p_c,outcomes,expID)
             
-        if return_MSE:
-            mse = np.mean((estimates - outcomes) ** 2)
-            MSEs.append(mse)
-        else:
-            predictions = np.append(predictions, estimates)
+    #     if return_MSE:
+    #         mse = np.mean((estimates - outcomes) ** 2)
+    #         MSEs.append(mse)
+    #     else:
+    #         predictions = np.append(predictions, estimates)
 
     if return_MSE:
         return np.mean(MSEs)
     else:
-        return predictions
+        return estimates
 
 #%%
 ### Fit HMM parameter (p_c) for subjects
@@ -158,165 +190,180 @@ def get_initial_parameters_new(data, expID, model, task, p_c_bounds, b_0, tau_0,
     print("Best initial parameter:", p_c)
     return p_c, bounds
 
-def fit_HMM_for_each_subject(subj_idx, subject_data, task, expID, model, p_c_bounds, b_0, tau_0, \
-                             n_initial_guesses, std_dev_pos):
-    """
-    Fits the HMM model to the provided subject data using multiple optimization restarts.
+# def fit_HMM_for_each_subject(subj_idx, subject_data, task, expID, model, p_c_bounds, b_0, tau_0, \
+#                              n_initial_guesses, std_dev_pos):
+#     """
+#     Fits the HMM model to the provided subject data using multiple optimization restarts.
 
-    This function is inspired by data_analysis_utils.fit_model().
+#     This function is inspired by data_analysis_utils.fit_model().
 
-    Parameters
-    ----------
-    subj_idx : int
-        Subject index.
-    subject_data : pd.DataFrame
-        Data for the subject.
-    task : str
-        Task name, either 'ada-pos' or 'ada-prob'.
-    expID : str or int
-        Experiment identifier.
-    model : str
-        Model name.
-    p_c_bounds : dict
-        Bounds for the model parameter.
-    b_0 : float
-        Prior belief about the mean (used in 'ada-pos').
-    tau_0 : float
-        Prior belief about the variance (used in 'ada-pos').
-    n_initial_guesses : int
-        Number of random initial guesses to try.
-    std_dev_pos : float
-        Standard deviation of the observations.
+#     Parameters
+#     ----------
+#     subj_idx : int
+#         Subject index.
+#     subject_data : pd.DataFrame
+#         Data for the subject.
+#     task : str
+#         Task name, either 'ada-pos' or 'ada-prob'.
+#     expID : str or int
+#         Experiment identifier.
+#     model : str
+#         Model name.
+#     p_c_bounds : dict
+#         Bounds for the model parameter.
+#     b_0 : float
+#         Prior belief about the mean (used in 'ada-pos').
+#     tau_0 : float
+#         Prior belief about the variance (used in 'ada-pos').
+#     n_initial_guesses : int
+#         Number of random initial guesses to try.
+#     std_dev_pos : float
+#         Standard deviation of the observations.
 
-    Returns
-    -------
-    result : bool
-        Whether the optimization was successful.
-    x_min : np.ndarray
-        The optimized parameter values.
-    fval : float
-        The minimized loss function value.
-    """
-    if expID != 3:
-        raise ValueError("Error: expID has to be 3 for the moment.")
-    if model != 'HMM':
-        raise ValueError("Error: model has to be HMM for the moment.")
-    if task not in task_types:
-        raise ValueError(f"Error: task has to be {task_types[0]} or {task_types[1]}.")
+#     Returns
+#     -------
+#     result : bool
+#         Whether the optimization was successful.
+#     x_min : np.ndarray
+#         The optimized parameter values.
+#     fval : float
+#         The minimized loss function value.
+#     """
+#     if expID != 3:
+#         raise ValueError("Error: expID has to be 3 for the moment.")
+#     if model != 'HMM':
+#         raise ValueError("Error: model has to be HMM for the moment.")
+#     if task not in task_types:
+#         raise ValueError(f"Error: task has to be {task_types[0]} or {task_types[1]}.")
      
-    print(f'ExpID: {expID}, Subject: {subj_idx}, Model: {model}, Task: {task}, Running optimization...')
+#     print(f'ExpID: {expID}, Subject: {subj_idx}, Model: {model}, Task: {task}, Running optimization...')
 
-    best_opt = None
-    best_fun = np.inf
+#     best_opt = None
+#     best_fun = np.inf
 
-    for _ in range(10):
-        fp_init, bounds = get_initial_parameters_new(subject_data, expID, model, task, p_c_bounds, b_0, tau_0,
-                                                     n_initial_guesses, std_dev_pos)
-        fp_init = np.array(fp_init)
+#     for _ in range(10):
+#         fp_init, bounds = get_initial_parameters_new(subject_data, expID, model, task, p_c_bounds, b_0, tau_0,
+#                                                      n_initial_guesses, std_dev_pos)
+#         fp_init = np.array(fp_init)
 
-        opt = so.minimize(
-            HMM_prediction,
-            fp_init,
-            args=(subject_data, task, expID, b_0, tau_0, std_dev_pos, True),
-            method='Powell',
-            bounds=bounds,
-            options={'disp': False}
-        )
+#         opt = so.minimize(
+#             HMM_prediction,
+#             fp_init,
+#             args=(subject_data, task, expID, b_0, tau_0, std_dev_pos, True),
+#             method='Powell',
+#             bounds=bounds,
+#             options={'disp': False}
+#         )
 
-        if opt['fun'] < best_fun:
-            best_fun = opt['fun']
-            best_opt = opt
+#         if opt['fun'] < best_fun:
+#             best_fun = opt['fun']
+#             best_opt = opt
 
-    opt = best_opt
+#     opt = best_opt
     
-    result = opt["success"]
-    p_c_min = opt['x']
-    fval = opt['fun']
+#     result = opt["success"]
+#     p_c_min = opt['x']
+#     fval = opt['fun']
     
-    return result, p_c_min, fval
+#     return result, p_c_min, fval
 
-def fit_HMM_for_every_subject(data_outcome_level, task, n_jobs=n_jobs, expID=expID, model=model, \
-                              p_c_bounds=p_c_bounds, b_0=b_0, tau_0=tau_0, \
-                                n_initial_guesses=n_initial_guesses, std_dev_pos=std_dev_pos):
-    """
-    Fits the HMM model for every subject in the provided data for a specific task.
+# def fit_HMM_for_every_subject(data_outcome_level, task, n_jobs=n_jobs, expID=expID, model=model, \
+#                               p_c_bounds=p_c_bounds, b_0=b_0, tau_0=tau_0, \
+#                                 n_initial_guesses=n_initial_guesses, std_dev_pos=std_dev_pos):
+#     """
+#     Fits the HMM model for every subject in the provided data for a specific task.
 
-    Parameters
-    ----------
-    data_outcome_level : pd.DataFrame
-        The full dataset containing all subjects and sessions.
-    task : str
-        The task name to filter the data.
-    n_jobs : int, optional
-        Number of parallel jobs to run (default is n_jobs from emilebdn.config.variables).
-    expID : str or int, optional
-        Experiment identifier (default is expID from emilebdn.config.variables).
-    model : str, optional
-        Model name (default is model from emilebdn.config.variables).
-    p_c_bounds : dict, optional
-        Bounds for the model parameters (default is p_c_bounds from emilebdn.config.variables).
-    b_0 : float, optional
-        Prior mean for inference (default is b_0 from emilebdn.config.variables).
-    tau_0 : float, optional
-        Prior precision for inference (default is tau_0 from emilebdn.config.variables).
-    n_initial_guesses : int, optional
-        Number of random initial guesses to try (default is n_initial_guesses from emilebdn.config.variables).
-    std_dev_pos : float, optional
-        Standard deviation parameter for inference (default is std_dev_pos from emilebdn.config.variables).
+#     Parameters
+#     ----------
+#     data_outcome_level : pd.DataFrame
+#         The full dataset containing all subjects and sessions.
+#     task : str
+#         The task name to filter the data.
+#     n_jobs : int, optional
+#         Number of parallel jobs to run (default is n_jobs from emilebdn.config.variables).
+#     expID : str or int, optional
+#         Experiment identifier (default is expID from emilebdn.config.variables).
+#     model : str, optional
+#         Model name (default is model from emilebdn.config.variables).
+#     p_c_bounds : dict, optional
+#         Bounds for the model parameters (default is p_c_bounds from emilebdn.config.variables).
+#     b_0 : float, optional
+#         Prior mean for inference (default is b_0 from emilebdn.config.variables).
+#     tau_0 : float, optional
+#         Prior precision for inference (default is tau_0 from emilebdn.config.variables).
+#     n_initial_guesses : int, optional
+#         Number of random initial guesses to try (default is n_initial_guesses from emilebdn.config.variables).
+#     std_dev_pos : float, optional
+#         Standard deviation parameter for inference (default is std_dev_pos from emilebdn.config.variables).
 
-    Returns
-    -------
-    dict
-        Dictionary mapping subject IDs to their optimized p_c values.
-    """
-    if task not in task_types:
-        raise ValueError(f"Error: task has to be {task_types[0]} or {task_types[1]}.")
+#     Returns
+#     -------
+#     dict
+#         Dictionary mapping subject IDs to their optimized p_c values.
+#     """
+#     if task not in task_types:
+#         raise ValueError(f"Error: task has to be {task_types[0]} or {task_types[1]}.")
     
-    task_data = data_outcome_level[data_outcome_level['task'] == task] 
+#     task_data = data_outcome_level[data_outcome_level['task'] == task] 
     
-    subjects = task_data['subject'].unique()
-    subjects_data = {
-        subject: task_data[task_data['subject'] == subject]
-        for subject in subjects
-    }
+#     subjects = task_data['subject'].unique()
+#     subjects_data = {
+#         subject: task_data[task_data['subject'] == subject]
+#         for subject in subjects
+#     }
 
-    p_c_fitted = Parallel(n_jobs=n_jobs)(
-        delayed(fit_HMM_for_each_subject)(subject_id, subjects_data[subject], task, expID, model, p_c_bounds, b_0, tau_0, \
-                                          n_initial_guesses, std_dev_pos)
-        for subject_id, subject in enumerate(subjects)
-    )
+#     p_c_fitted = Parallel(n_jobs=n_jobs)(
+#         delayed(fit_HMM_for_each_subject)(subject_id, subjects_data[subject], task, expID, model, p_c_bounds, b_0, tau_0, \
+#                                           n_initial_guesses, std_dev_pos)
+#         for subject_id, subject in enumerate(subjects)
+#     )
     
-    # If p_c_fitted is a list/array with a single value, extract the value
-    p_c_fitted_values = [pc_min[0] if isinstance(pc_min, (np.ndarray, list)) else pc_min \
-                     for _, pc_min, _ in p_c_fitted]
+#     # If p_c_fitted is a list/array with a single value, extract the value
+#     p_c_fitted_values = [pc_min[0] if isinstance(pc_min, (np.ndarray, list)) else pc_min \
+#                      for _, pc_min, _ in p_c_fitted]
     
-    return dict(zip(subjects, p_c_fitted_values))
+#     return dict(zip(subjects, p_c_fitted_values))
 
 #%%
 ### Fit HMM parameter (p_c) on training sequences and use it to predict subject behavior on test sequences
 
-def predict_sequences_with_HMM(train_sequences, test_sequences, task, subj_idx=0):
+def predict_sequences_with_HMM(train_sequences, test_sequences, task, subj_idx=0, p_c_optimal = False):
     """
     Fits HMM on train_sequences and predicts outcomes for test_sequences.
     Returns: predictions (array)
     """
-    # Fit HMM
-    p_c_min = fit_HMM_for_each_subject(
-        subj_idx=subj_idx,
-        subject_data=train_sequences,
-        task=task,
-        expID=expID,
-        model=model,
-        p_c_bounds=p_c_bounds,
-        b_0=b_0,
-        tau_0=tau_0,
-        n_initial_guesses=n_initial_guesses,
-        std_dev_pos=std_dev_pos,
-    )[1]
+    data_outcome_level_preprocessed_bis = pd.read_csv(data_outcome_level_preprocessed_path)
+    subjects = data_outcome_level_preprocessed_bis['subject'].unique()
+    subjects_id = {subject: idx for idx, subject in enumerate(subjects)}
 
-    # Remove the 'estimate' column from test_sequences if it exists, to ensure the target is not used in prediction
-    if 'estimate' in test_sequences.columns:
-        test_sequences = test_sequences.drop(columns=['estimate'])
+    # Fit HMM
+    # p_c_min = fit_HMM_for_each_subject(
+    #     subj_idx=subj_idx,
+    #     subject_data=train_sequences,
+    #     task=task,
+    #     expID=expID,
+    #     model=model,
+    #     p_c_bounds=p_c_bounds,
+    #     b_0=b_0,
+    #     tau_0=tau_0,
+    #     n_initial_guesses=n_initial_guesses,
+    #     std_dev_pos=std_dev_pos,
+    # )[1]
+
+    # p_c_min = 0.5
+
+    sessions = train_sequences['session_idx'].unique()
+    subjs = train_sequences['subject'].unique()
+    subj_idx = [subjects_id[subj] for subj in subjs]
+
+    if p_c_optimal == False:
+        p_c_min = fit_model(expID, model, subj_idx, sessions)[1]
+    elif p_c_optimal == True:
+        p_c_min = change_prob_prob
+
+    # # Remove the 'estimate' column from test_sequences if it exists, to ensure the target is not used in prediction
+    # if 'estimate' in test_sequences.columns:
+    #     test_sequences = test_sequences.drop(columns=['estimate'])
     
     # Predict outcomes on test set
     predictions = HMM_prediction(
@@ -376,4 +423,4 @@ def compute_mse_evf_for_all_subjects(data_outcome_level, task, n_splits=int(1/(1
     evf_scores = {subject: res[1] for subject, res in zip(subjects, results)}
     return mse_scores, evf_scores
 
-# %%
+#%%

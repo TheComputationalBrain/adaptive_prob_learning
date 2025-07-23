@@ -11,6 +11,7 @@ import sys
 import time
 import torch
 
+import matplotlib.pyplot as plt
 import numpy as np
 import os.path as op
 import pandas as pd
@@ -22,9 +23,10 @@ from sklearn.metrics import explained_variance_score
 from sklearn.model_selection import KFold
 from torch.utils.data import DataLoader
 
-sys.path.append(op.dirname(op.dirname(op.dirname(op.abspath(__file__)))))
+sys.path.append(op.dirname(op.dirname(op.dirname(__file__))))
 
 from emilebdn.config.variables import (
+    random_state,
     input_size, 
     hidden_size, 
     output_size, 
@@ -37,11 +39,12 @@ from emilebdn.GRU.GRU_simple_model import SimpleRNN
 today = datetime.now().strftime("%Y%m%d")
 
 #%%
-def import_sequences(data, path, task):
+def format_sequences(path, task, data=None):
     """
     Import sequences from experimental or simulated data and optionally attach subject labels.
     """
-    data = pd.read_csv(path)
+    if data is None:
+        data = pd.read_csv(path)
 
     groupby_variables = ['subject', 'session_idx', 'sequence_id']
 
@@ -66,12 +69,44 @@ def import_sequences(data, path, task):
 
     return sequences
 
+def flatten_sequences(sequences, tested_sequence=None):
+    """
+    Flatten a list of sequences into a single DataFrame.
+    If tested_sequence is provided, its records will appear first in the DataFrame.
+    Each sequence is a tuple: (hidden_parms, input_seq, target_seq, subject)
+    """
+    tested_records = []
+    other_records = []
+
+    for seq_idx, sequence in enumerate(sequences):
+        hidden_parms, input_seq, target_seq, subject = sequence
+        seq_len = len(input_seq)
+
+        for t in range(seq_len):
+            record = {
+                'subject': subject,
+                'sequence_id_2': seq_idx,
+                'outcome_idx': t,
+                'hidden_parameter': hidden_parms[t].item(),
+                'outcome': input_seq[t].item(),
+                'estimate': target_seq[t].item()
+            }
+
+            if tested_sequence is not None and id(sequence) == id(tested_sequence):
+                tested_records.append(record)
+            else:
+                other_records.append(record)
+
+    # Return tested sequence first
+    df = pd.DataFrame.from_records(tested_records + other_records)
+    return df
+
 def split_sequences_for_cv(sequences, n_splits):
     """
     Split the data into n subsequences for cross-validation.
     """
     # Define cross-validation splits
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
     splits = []
 
     for train_index, test_index in kf.split(sequences):
@@ -175,3 +210,164 @@ def train_and_evaluate_subject_gru(subject_sequences, subject_id, data, task, tr
         'mse': mse/len(cross_val_splits),
         'evf': np.mean(evfs)
     })
+
+def plot_subject_sequence(
+    outcome_seq,
+    hidden_parms,
+    len_train_seq_sb,
+    len_train_seq_gr,
+    random_subject,
+    hidden_sizes,
+    subject_seq=None,
+    mean_subject_behavior=None,
+    gru_sb_predicted_seq=None,
+    gru_gr_predicted_seq=None,
+    hmm_sb_predicted_seq=None,
+    hmm_gr_predicted_seq=None
+):
+    """
+    Plots the behavioral sequence of a subject along with model predictions and hidden parameters.
+    Parameters
+    ----------
+    outcome_seq : array-like of int (0 or 1)
+        # Sequence of observed outcomes (e.g., stimuli), where 1 = blue, 0 = yellow.
+    hidden_parms : array-like or np.ndarray
+        # Sequence of hidden parameter values (e.g., latent state probabilities or model parameters).
+        # Can be 1D (length T) or 2D (shape [T, D]) where D is the number of hidden parameters.
+    len_train_seq_sb : int
+        # Length of the subject-level training sequence.
+    len_train_seq_gr : int
+        # Length of the group-level training sequence.
+    random_subject : int or str
+        # Identifier for the subject being plotted.
+    hidden_sizes : dict
+        # Dictionary with keys 'subject' and 'group', values are the number of GRU units for each model.
+    subject_seq : array-like of float, optional
+        # Sequence of subject's behavioral estimates (e.g., probability of choosing blue).
+    mean_subject_behavior : array-like of float, optional
+        # Sequence of mean behavioral estimates across subjects.
+    gru_sb_predicted_seq : array-like of float, optional
+        # Sequence of subject-level GRU model predictions.
+    gru_gr_predicted_seq : array-like of float, optional
+        # Sequence of group-level GRU model predictions.
+    hmm_sb_predicted_seq : array-like of float, optional
+        # Sequence of subject-level HMM model predictions.
+    hmm_gr_predicted_seq : array-like of float, optional
+        # Sequence of group-level HMM model predictions.
+    Returns
+    -------
+    None
+        # Displays a matplotlib plot visualizing the outcome sequence, hidden parameters, subject and mean behavior,
+        # and model predictions (GRU and HMM) for the specified subject.
+    """
+    plt.figure(figsize=(14, 10))  
+    ax1 = plt.subplot(1, 1, 1)
+    
+    ### Outcome sequence and hidden parameters plotting
+    # Plot outcome as dots: blue if 1, yellow if 0, with larger size
+    outcome_colors = ['yellow' if o == 0 else 'blue' for o in outcome_seq]
+    ax1.scatter(
+        range(len(outcome_seq)),
+        outcome_seq,
+        c=outcome_colors,
+        label='Stimuli (Outcome)',
+        s=80,  # Increased point size
+        marker='o',
+        edgecolor='black',
+        zorder=3
+    )
+    # Plot hidden parameter in dark gray, dashed line
+    ax2 = ax1.twinx()
+    if hasattr(hidden_parms, 'shape') and len(hidden_parms.shape) == 2 and hidden_parms.shape[1] > 1:
+        mean_hidden = hidden_parms.mean(axis=1)
+        ax2.plot(
+            mean_hidden,
+            label='Hidden Param (mean)',
+            color='dimgray',
+            linestyle='--',
+            alpha=0.8,
+            linewidth=2
+        )
+    else:
+        ax2.plot(
+            hidden_parms,
+            label='Hidden Param',
+            color='dimgray',
+            linestyle='--',
+            alpha=0.8,
+            linewidth=2
+        )
+
+    ### Subject and mean subject behavior plotting
+    # Plot subject estimate as light blue line
+    ax1.plot(subject_seq, label='Subject Behavior', color='deepskyblue', alpha=0.8, linewidth=4)
+    # Plot mean subject behavior as a dark blue line
+    if mean_subject_behavior is not None:
+        ax1.plot(mean_subject_behavior, label='Mean Subject Behavior', color='darkblue', alpha=0.8, linewidth=2)
+
+    ### GRU estimates plotting
+    # Plot subject-level GRU model estimate as red line
+    if gru_sb_predicted_seq is not None:
+        ax1.plot(gru_sb_predicted_seq, label=f"Subject-level GRU (nb units: {hidden_sizes['subject']})", color='red', alpha=0.8, linewidth=2)
+    # Plot group-level GRU model estimate as pink line
+    if gru_gr_predicted_seq is not None:
+        ax1.plot(gru_gr_predicted_seq, label=f"Group-level GRU (nb units: {hidden_sizes['group']})", color='pink', alpha=0.8, linewidth=2)
+    
+    ### HMM estimates plotting
+    # Plot subject-level HMM estimate as green line
+    if hmm_sb_predicted_seq is not None:
+        ax1.plot(
+            hmm_sb_predicted_seq,
+            label='Subject-level HMM',
+            color='green',
+            alpha=0.8,
+            linewidth=2
+        )
+    # Plot group-level HMM estimate as dark green line
+    if hmm_gr_predicted_seq is not None:
+        ax1.plot(
+            hmm_gr_predicted_seq,
+            label='Group-level HMM',
+            color='darkgreen',
+            alpha=0.8,
+            linewidth=2
+        )
+
+    ax1.set_ylabel(r'$\mathbb{P}(\mathrm{blue})$')
+    ax1.set_ylim(0, 1)
+    ax1.set_xlabel('Time step')
+    ax1.set_title(f'Sequence 1 (Subject {random_subject})')
+
+    ax2.set_ylim(0, 1)
+    ax2.tick_params(axis='y', labelcolor='black')  
+    lines, labels = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    # Set legend positions: main legend top right, secondary legend bottom right
+    main_legend_loc = (0.97, 0.97)
+    secondary_legend_loc = (0.97, 0.03)
+    # Main legend for lines
+    legend1 = ax1.legend(
+        lines + lines2,
+        labels + labels2,
+        loc='upper right',
+        bbox_to_anchor=main_legend_loc,
+        frameon=True,  # Boxed
+        fancybox=True
+    )
+    ax1.add_artist(legend1)
+    # Secondary legend for train sequence info (with box)
+    legend2 = ax1.legend(
+        [
+            f"Train seq (subject): {len_train_seq_sb}",
+            f"Train seq (group): {len_train_seq_gr}"
+        ],
+        loc='lower right',
+        bbox_to_anchor=secondary_legend_loc,
+        frameon=True,  # Boxed
+        fancybox=True,
+        handlelength=0,
+        handletextpad=0
+    )
+    ax1.add_artist(legend2)
+    plt.tight_layout()
+    plt.show()

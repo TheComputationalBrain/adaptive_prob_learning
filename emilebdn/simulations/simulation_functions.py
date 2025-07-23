@@ -14,7 +14,7 @@ import os.path as op
 import pandas as pd
 
 # Add the root of the repository to sys.path
-sys.path.append(op.dirname(op.dirname(op.dirname(op.abspath(__file__)))))
+sys.path.append(op.dirname(op.dirname(op.dirname(__file__))))
 
 import emilebdn.simulations.model_learner_pos as MP
 import models.IdealObserver as IO

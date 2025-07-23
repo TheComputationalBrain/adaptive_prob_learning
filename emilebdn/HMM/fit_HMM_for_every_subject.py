@@ -14,7 +14,7 @@ import pandas as pd
 from datetime import datetime
 
 # Add the root of the repository to sys.path
-sys.path.append(op.dirname(op.dirname(op.dirname(op.abspath(__file__)))))
+sys.path.append(op.dirname(op.dirname(op.dirname(__file__))))
 
 from emilebdn.config.paths import (
     computed_data_emile_path,
@@ -48,7 +48,7 @@ for task in task_types:
     p_c_fitted_df.to_csv(p_c_fitted_path_csv, index=False)
     print(f'Fitted p_c values for {task} saved to {p_c_fitted_path_csv}')
 
-# %%
+#%%
 stats = []
 
 for task in task_types:

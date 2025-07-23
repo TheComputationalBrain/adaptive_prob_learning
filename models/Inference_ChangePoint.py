@@ -200,7 +200,6 @@ def marginal_Alpha(Alpha, lik):
 
     return marg_dist
 
-
 def compute_inference(seq=None, resol=None, Nitem=2, p_c=None,
     p1_min=None, p1_max=None, do_inference_on_current_trial=False):
     """

@@ -26,12 +26,28 @@ from sklearn.model_selection import KFold
 from torch.utils.data import DataLoader
 
 # Add the root of the repository to sys.path
-sys.path.append(op.dirname(op.dirname(op.dirname(op.abspath(__file__)))))
+sys.path.append(op.dirname(op.dirname(op.dirname(__file__))))
 
 from emilebdn.GRU.GRU_simple_model import SimpleRNN
-from emilebdn.config.paths import computed_data_emile_path, data_outcome_level_preprocessed_path, data_outcome_level_simulated_path
-from emilebdn.config.variables import n_jobs, nb_subjects, train_size_ratio, input_size, hidden_size, max_hidden_size, output_size, \
-    learning_rate, num_epochs, batch_size, subject_embedding_dim
+from emilebdn.config.paths import (
+    computed_data_emile_path, 
+    data_outcome_level_preprocessed_path, 
+    data_outcome_level_simulated_path
+)
+from emilebdn.config.variables import (
+    n_jobs, 
+    random_state,
+    nb_subjects, 
+    train_size_ratio, 
+    input_size, 
+    hidden_size, 
+    max_hidden_size, 
+    output_size, 
+    learning_rate, 
+    num_epochs, 
+    batch_size, 
+    subject_embedding_dim
+)
 
 today = datetime.now().strftime("%Y%m%d")
 
@@ -111,7 +127,7 @@ def split_sequences_for_cv(sequences, n_splits):
     """
 
     # Define cross-validation splits
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
     splits = []
 
     for train_index, test_index in kf.split(sequences):

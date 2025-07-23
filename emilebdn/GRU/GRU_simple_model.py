@@ -6,15 +6,16 @@ Author: @emilebdn
 Created date: 2025-04-15  
 Updated: 2025-05-15
 """
+#%%
 import sys
 import torch
 
 import os.path as op
 import torch.nn as nn
 
-# Add the root of the repository to sys.path
-sys.path.append(op.dirname(op.dirname(op.dirname(op.abspath(__file__)))))
+sys.path.append(op.dirname(op.dirname(op.dirname(__file__))))
 
+#%%
 from emilebdn.config.variables import subject_embedding_dim
 
 class SimpleRNN(nn.Module):

@@ -13,7 +13,7 @@ import pandas as pd
 from scipy.stats import ttest_ind
 
 # Add the root of the repository to sys.path
-sys.path.append(op.dirname(op.dirname(op.abspath(__file__))))
+sys.path.append(op.dirname(op.dirname(op.dirname(__file__))))
 
 from emilebdn.config.paths import (
     computed_data_emile_path,
@@ -115,4 +115,4 @@ comparison_path = op.join(
 )
 t_test_df.to_csv(comparison_path, index=False)
 print(f"T-test results saved to {comparison_path}")
-# %%
+#%%

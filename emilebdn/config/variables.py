@@ -5,7 +5,8 @@ and simulating subjects' behavior in adaptive learning tasks.
 Author: @emilebdn  
 Created date: 2025-04-30
 """
-n_jobs = 40 # Number of parallel jobs for data processing
+n_jobs = 15 # Number of parallel jobs for data processing
+random_state = 42 # Random state
 nb_subjects = 94 # Number of subjects
 
 # -------------------------------
@@ -33,7 +34,6 @@ subject_embedding_dim = 8  # Dimensionality of the subject embedding
 # HMM hyperparameters
 # -------------------------------
 
-# Bounds for p_c (HMM model parameter)
 p_c_bounds = {
     'ada-pos': {'min': 1e-4, 'max': 0.9},
     'ada-prob': {'min': 0, 'max': 1}
@@ -70,3 +70,10 @@ freeze_duration_prob = 6 # Duration of freezing (number of outcomes)
 min_val_prob = 1/10 # Minimum value for probability
 max_val_prob = 9/10 # Maximum value for probability
 odds_change_threshold_prob = 4 # Odds change threshold for sampling new probabilities
+
+# -------------------------------
+# HMM with FNN hyperparameters
+# -------------------------------
+
+window_size = 5 # Input size
+max_iter = 1000
