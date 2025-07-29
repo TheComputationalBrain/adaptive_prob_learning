@@ -13,10 +13,8 @@ nb_subjects = 94 # Number of subjects
 # GRU hyperparameters
 # -------------------------------
 
-data_types = ['experiment', 'simulation']  # Data sources ('experiment' or 'simulation')
-data_type = data_types[1]  # Data source to be used ('experiment' or 'simulation')
 task_types = ['ada-pos', 'ada-prob']  # Task types ('ada-pos' and 'ada-prob')
-task = task_types[0]  # Task to be used ('ada-pos' or 'ada-prob')
+task = task_types[1]  # Task to be used ('ada-pos' or 'ada-prob')
 train_size_ratio = 0.8  # Ratio of training data to total data
 input_size = 1  # Input size for the GRU model
 hidden_size = 1024  # Hidden layer size for the GRU model
@@ -25,8 +23,6 @@ output_size = 1  # Output size for the GRU model
 learning_rate = 1e-4  # Learning rate for the optimizer
 num_epochs = 100  # Number of training epochs
 batch_size = 16  # Batch size for data loaders
-best_GRU_hidden_layer_sizes = {'ada-pos': 1024, 'ada-prob': 16}  # Best hidden layer sizes for each task
-
 use_subject_embedding = True  # Flag to use subject embedding
 subject_embedding_dim = 8  # Dimensionality of the subject embedding
 
@@ -59,11 +55,13 @@ nb_of_restart_for_Powell = 100  # Number of restarts for the Powell optimization
 length = 75 # Length of each sequence
 n_sequences_for_each_subject = {'ada-pos': 6, 'ada-prob': 15}  # Number of sequences for each subject
 
+# Magnitude task parameters
 n_sequences_pos = 100 # Number of sequences for the magnitude task
 change_prob_pos = 1/10 # Probability of changing the mean
 freeze_duration_pos = 3 # Duration of freezing (number of outcomes)
 std_dev_pos = 10/300 # Standard deviation of the observations
 
+# Probability task parameters
 n_sequences_prob = 150 # Number of sequences for the probability task
 change_prob_prob = 1/20 # Change-point probability
 freeze_duration_prob = 6 # Duration of freezing (number of outcomes)
@@ -76,4 +74,4 @@ odds_change_threshold_prob = 4 # Odds change threshold for sampling new probabil
 # -------------------------------
 
 window_size = 5 # Input size
-max_iter = 1000
+max_iter = 1000 # Maximum number of iterations for the optimization

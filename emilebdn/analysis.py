@@ -1,4 +1,18 @@
-### '20250709'
+"""
+This script performs a comprehensive analysis of model predictions against experimental data for probability learning task.
+
+Key functionalities include:
+- Importing and configuring data for analysis.
+- Computing MSE and EVS for each subject and model, followed by aggregation.
+- Performing paired t-tests to compare model performance.
+- Visualizing mean MSE and EVS with error bars.
+- Analyzing the first prediction of each sequence under different conditions.
+- Conducting linear regression to assess the relationship between hidden parameters and model predictions.
+- Investigating regression coefficients before and after change points.
+
+Author: @emilebdn
+Created date: 2025-07-09
+"""
 #%%
 ### 0 - Imports and config
 import sys
@@ -20,41 +34,27 @@ from scipy.stats import ttest_rel
 
 sys.path.append(op.dirname(op.dirname(__file__)))
 
-from data_analysis_utils import fit_model
-from emilebdn.config.paths import (
-    data_outcome_level_preprocessed_path,
-    data_outcome_level_simulated_path
-)
+from emilebdn.config.paths import data_outcome_level_preprocessed_path
 from emilebdn.config.variables import (
-    n_jobs,
     random_state,
+    task,
     train_size_ratio,
-    expID,
     length, 
     n_sequences_for_each_subject
 )
-from emilebdn.HMM.HMM_functions import HMM_prediction
 
 random_state = random_state
-task = 'ada-prob'
+
 data_path = data_outcome_level_preprocessed_path.replace('.csv', f'_{task}_with_predictions.csv')
 data = pd.read_csv(data_path)
-print(data.columns)
+
 subjects = data['subject'].unique().tolist()
-nb_subjects = len(subjects)
-subject_ids = {subject: i for i, subject in enumerate(subjects)}
-n_seq = n_sequences_for_each_subject[task]
-n_tri = length
-n_test_seqs = int((1 - train_size_ratio)*n_seq) + 1
-nb_test_seqs = int(n_seq / n_test_seqs)
 
-data['group_RNN_2_2048'] = data['group_RNN_2048']
+n_seq = n_sequences_for_each_subject[task] # Number of sequences per subject
+n_tri = length # Number of trials per sequence
+n_test_seqs = int((1 - train_size_ratio)*n_seq) + 1 # Number of test sequences per test sequences' set
+nb_test_seqs = int(n_seq / n_test_seqs) # Number of test sequences' sets per subject
 
-columns_to_drop = [
-    'subject', 'task', 'session_idx', 'outcome_idx', 'outcome',
-    'estimate', 'hidden_parameter', 'did_change_point_occur', 'sequence_id'
-]
-# models = [col for col in data.columns if col not in columns_to_drop]
 models = [
     'estimate', 'mean_estimate_without_cv', 'mean_estimate_with_cv',
     'subject_HMM', 'optimal_HMM', 'group_HMM', 'big_group_HMM',
@@ -68,15 +68,6 @@ models = [
     'big_group_HMM_with_FNN_4', 'big_group_HMM_with_FNN_8', 'big_group_HMM_with_FNN_16',
     'big_group_HMM_with_FNN_32', 'big_group_HMM_with_FNN_512', 'big_group_HMM_with_FNN_1024',
 ]
-
-columns = columns_to_drop + models[1:]
-
-data = data[columns]
-
-print(data.columns)
-
-data.to_csv(data_path, index=False)
-
 
 #%%
 ### 1 - Compute MSE and EVS for each subject and model, then aggregate
@@ -186,126 +177,6 @@ print(t_test_df)
 #%%
 ### 3 - Plot mean MSE and mean EVS for each model, with error bars for std
 
-def plot_mse_evs_barplot(agg_df, sort_by=None, diff_with_reference_model=None):
-    """
-    Plot Mean MSE (bar) and Mean EVS (point ± std) for each model.
-    If diff_with_reference_model is not None (str), plot difference with reference model.
-
-    Args:
-        agg_df (pd.DataFrame): DataFrame with columns for mean/std MSE/EVS and optionally diff columns.
-        sort_by (str or None): None (no sorting), 'mse'/'evs' (sort by mean_mse/mean_evs), or
-                               'diff_mse'/'diff_evs' (sort by diff columns if diff_with_reference_model is set).
-        diff_with_reference_model (str or None): Reference model name for difference columns, or None.
-    """
-    mpl.rcParams.update({
-        'font.family': 'sans-serif',
-        'font.sans-serif': ['DejaVu Sans'],
-        'font.size': 12,
-    })
-
-    df = agg_df.copy()
-    if diff_with_reference_model is not None:
-        mse_col = f'mean_diff_mse_with_{diff_with_reference_model}'
-        evs_col = f'mean_diff_evs_with_{diff_with_reference_model}'
-        std_evs_col = f'std_diff_evs_with_{diff_with_reference_model}'
-    else:
-        mse_col = 'mean_mse'
-        evs_col = 'mean_evs'
-        std_evs_col = 'std_evs'
-
-    if sort_by == 'mse':
-        df = df.sort_values(mse_col, ascending=True)
-    elif sort_by == 'evs':
-        df = df.sort_values(evs_col, ascending=False)
-
-    # Assign numbers to models for x-axis
-    model_names = df['model'].tolist()
-    model_numbers = list(range(1, len(model_names) + 1))
-    model_number_map = {name: num for name, num in zip(model_names, model_numbers)}
-
-    fig, ax1 = plt.subplots(figsize=(12, 7))
-
-    bar_width = 0.5
-    bar_color = sns.color_palette("Blues", n_colors=3)[2]
-    evs_color = sns.color_palette("Oranges", n_colors=3)[2]
-
-    # Bar plot for MSE or diff_MSE
-    bars = ax1.bar(
-        model_numbers,
-        df[mse_col],
-        width=bar_width,
-        color=bar_color,
-        alpha=0.85,
-        label='Mean MSE' if diff_with_reference_model is None else f'Mean ΔMSE vs {diff_with_reference_model}',
-        edgecolor='black'
-    )
-    ax1.set_ylabel(
-        'Mean MSE' if diff_with_reference_model is None else f'Mean ΔMSE vs {diff_with_reference_model}',
-        color=bar_color, fontsize=13
-    )
-    ax1.tick_params(axis='y', labelcolor=bar_color)
-    ax1.set_xticks(model_numbers)
-    ax1.set_xticklabels(model_numbers, rotation=0, ha='center', fontsize=12)
-    ax1.set_xlabel('Model (see legend below)', fontsize=13)
-
-    # Overlay EVS (points with error bars)
-    ax2 = ax1.twinx()
-    evs = ax2.errorbar(
-        model_numbers,
-        df[evs_col],
-        yerr=df[std_evs_col],
-        fmt='o',
-        markersize=10,
-        color=evs_color,
-        ecolor='gray',
-        elinewidth=2,
-        capsize=7,
-        label='Mean EVS ± STD' if diff_with_reference_model is None else f'Mean ΔEVS ± STD vs {diff_with_reference_model}',
-        zorder=10
-    )
-    ax2.set_ylabel(
-        'Mean EVS' if diff_with_reference_model is None else f'Mean ΔEVS vs {diff_with_reference_model}',
-        color=evs_color, fontsize=13
-    )
-    ax2.tick_params(axis='y', labelcolor=evs_color)
-    ax2.set_ylim(-1, 1)  # Always show EVS in [-1, 1] range
-
-    # Add grid and background
-    ax1.grid(axis='y', linestyle='--', alpha=0.4)
-    fig.patch.set_facecolor('white')
-    ax1.set_axisbelow(True)
-
-    # Custom legend
-    handles = [
-        mpatches.Patch(
-            color=bar_color,
-            label='Mean MSE' if diff_with_reference_model is None else f'Mean ΔMSE vs {diff_with_reference_model}'
-        ),
-        plt.Line2D(
-            [0], [0], marker='o', color='w', markerfacecolor=evs_color, markersize=10,
-            label='Mean EVS ± STD' if diff_with_reference_model is None else f'Mean ΔEVS ± STD vs {diff_with_reference_model}',
-            markeredgecolor='gray'
-        )
-    ]
-    ax1.legend(handles=handles, loc='upper right', fontsize=12, frameon=True)
-
-    plt.title(
-        f"Model Comparison: {'Mean MSE (bar) and Mean EVS (point ± std)' if diff_with_reference_model is None else f'Difference vs {diff_with_reference_model}'}"
-        f", sort_by: {sort_by}",
-        fontsize=15, pad=15
-    )
-    plt.tight_layout()
-
-    # Add model number-to-name mapping below the plot
-    mapping_text = "\n".join([f"{num}: {name}" for num, name in zip(model_numbers, model_names)])
-    plt.figtext(
-        0.5, -0.12, f"Model number-to-name mapping:\n{mapping_text}",
-        ha='center', va='top', fontsize=11, wrap=True
-    )
-
-    plt.subplots_adjust(bottom=0.28)  # leave room for mapping
-    plt.show()
-
 def plot_mse_evs_barplot(agg_df, sort_by=None, diff_with_reference_model=None, show_model_legend=True):
     """
     Plot Mean MSE (bar) and Mean EVS (point ± std) for each model.
@@ -313,127 +184,7 @@ def plot_mse_evs_barplot(agg_df, sort_by=None, diff_with_reference_model=None, s
 
     Args:
         agg_df (pd.DataFrame): DataFrame with columns for mean/std MSE/EVS and optionally diff columns.
-        sort_by (str or None): None (no sorting), 'mse'/'evs' (sort by mean_mse/mean_evs), or
-                               'diff_mse'/'diff_evs' (sort by diff columns if diff_with_reference_model is set).
-        diff_with_reference_model (str or None): Reference model name for difference columns, or None.
-        show_model_legend (bool): Whether to display the model number-to-name mapping below the plot.
-    """
-    mpl.rcParams.update({
-        'font.family': 'sans-serif',
-        'font.sans-serif': ['DejaVu Sans'],
-        'font.size': 12,
-    })
-
-    df = agg_df.copy()
-    if diff_with_reference_model is not None:
-        mse_col = f'mean_diff_mse_with_{diff_with_reference_model}'
-        evs_col = f'mean_diff_evs_with_{diff_with_reference_model}'
-        std_evs_col = f'std_diff_evs_with_{diff_with_reference_model}'
-    else:
-        mse_col = 'mean_mse'
-        evs_col = 'mean_evs'
-        std_evs_col = 'std_evs'
-
-    if sort_by == 'mse':
-        df = df.sort_values(mse_col, ascending=True)
-    elif sort_by == 'evs':
-        df = df.sort_values(evs_col, ascending=False)
-
-    model_names = df['model'].tolist()
-    model_numbers = list(range(1, len(model_names) + 1))
-    model_number_map = {name: num for name, num in zip(model_names, model_numbers)}
-
-    fig, ax1 = plt.subplots(figsize=(12, 7))
-
-    bar_width = 0.5
-    bar_color = sns.color_palette("Blues", n_colors=3)[2]
-    evs_color = sns.color_palette("Oranges", n_colors=3)[2]
-
-    bars = ax1.bar(
-        model_numbers,
-        df[mse_col],
-        width=bar_width,
-        color=bar_color,
-        alpha=0.85,
-        label='Mean MSE' if diff_with_reference_model is None else f'Mean ΔMSE vs {diff_with_reference_model}',
-        edgecolor='black'
-    )
-    ax1.set_ylabel(
-        'Mean MSE' if diff_with_reference_model is None else f'Mean ΔMSE vs {diff_with_reference_model}',
-        color=bar_color, fontsize=13
-    )
-    ax1.tick_params(axis='y', labelcolor=bar_color)
-    ax1.set_xticks(model_numbers)
-    ax1.set_xticklabels(model_numbers, rotation=0, ha='center', fontsize=12)
-    ax1.set_xlabel('Model (see legend below)' if show_model_legend else 'Model', fontsize=13)
-
-    ax2 = ax1.twinx()
-    evs = ax2.errorbar(
-        model_numbers,
-        df[evs_col],
-        yerr=df[std_evs_col],
-        fmt='o',
-        markersize=10,
-        color=evs_color,
-        ecolor='gray',
-        elinewidth=2,
-        capsize=7,
-        label='Mean EVS ± STD' if diff_with_reference_model is None else f'Mean ΔEVS ± STD vs {diff_with_reference_model}',
-        zorder=10
-    )
-    ax2.set_ylabel(
-        'Mean EVS' if diff_with_reference_model is None else f'Mean ΔEVS vs {diff_with_reference_model}',
-        color=evs_color, fontsize=13
-    )
-    ax2.tick_params(axis='y', labelcolor=evs_color)
-    ax2.set_ylim(-1, 1)
-
-    ax1.grid(axis='y', linestyle='--', alpha=0.4)
-    fig.patch.set_facecolor('white')
-    ax1.set_axisbelow(True)
-
-    # Custom legend with compact styling
-    handles = [
-        mpatches.Patch(
-            color=bar_color,
-            label='Mean MSE' if diff_with_reference_model is None else f'Mean ΔMSE vs {diff_with_reference_model}'
-        ),
-        plt.Line2D(
-            [0], [0], marker='o', color='w', markerfacecolor=evs_color, markersize=10,
-            label='Mean EVS ± STD' if diff_with_reference_model is None else f'Mean ΔEVS ± STD vs {diff_with_reference_model}',
-            markeredgecolor='gray'
-        )
-    ]
-    ax1.legend(handles=handles, loc='upper right', fontsize=10, frameon=True)
-
-    plt.title(
-        f"Model Comparison: {'Mean MSE (bar) and Mean EVS (point ± std)' if diff_with_reference_model is None else f'Difference vs {diff_with_reference_model}'}"
-        f", sort_by: {sort_by}",
-        fontsize=15, pad=15
-    )
-    plt.tight_layout()
-
-    if show_model_legend:
-        mapping_text = ", ".join([f"{num}: {name}" for num, name in zip(model_numbers, model_names)])
-        plt.figtext(
-            0.5, -0.08, f"Model mapping: {mapping_text}",
-            ha='center', va='top', fontsize=10, wrap=True
-        )
-        plt.subplots_adjust(bottom=0.2)  # space for legend
-    else:
-        plt.subplots_adjust(bottom=0.1)
-
-    plt.show()
-
-def plot_mse_evs_barplot(agg_df, sort_by=None, diff_with_reference_model=None, show_model_legend=True):
-    """
-    Plot Mean MSE (bar) and Mean EVS (point ± std) for each model.
-    If diff_with_reference_model is not None (str), plot difference with reference model.
-
-    Args:
-        agg_df (pd.DataFrame): DataFrame with columns for mean/std MSE/EVS and optionally diff columns.
-        sort_by (str or None): None (no sorting), 'mse'/'evs' (sort by mean_mse/mean_evs), or
-                               'diff_mse'/'diff_evs' (sort by diff columns if diff_with_reference_model is set).
+        sort_by (str or None): None (no sorting), 'mse'/'evs' (sort by mse/evs)
         diff_with_reference_model (str or None): Reference model name for difference columns, or None.
         show_model_legend (bool): Whether to display the model number-to-name mapping below the plot.
 
@@ -556,7 +307,7 @@ def plot_mse_evs_barplot(agg_df, sort_by=None, diff_with_reference_model=None, s
     # Return mapping DataFrame
     return pd.DataFrame({'Index': model_numbers, 'Model name': model_names})
 
-plot_mse_evs_barplot(agg_df, sort_by='evs', diff_with_reference_model=reference_model) #reference_model)
+plot_mse_evs_barplot(agg_df, sort_by='evs', diff_with_reference_model=reference_model)
 
 #%%
 ### 4 - Plot MSE and EVS for each subject and a chosen model, with bars for mean ± std
@@ -570,7 +321,7 @@ def plot_subjectwise_comparison(scores_df, model1, model2):
     """
     mpl.rcParams.update({
         'font.family': 'sans-serif',
-        'font.sans-serif': ['DejaVu Sans'],  # Peut être remplacé par 'Arial' ou autre
+        'font.sans-serif': ['DejaVu Sans'],  
         'font.size': 12,
     })
 
@@ -633,10 +384,9 @@ def plot_subjectwise_comparison(scores_df, model1, model2):
                loc='lower center', ncol=3, frameon=False, fontsize=12, bbox_to_anchor=(0.5, -0.05))
 
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.15)  # leave room for legend
+    plt.subplots_adjust(bottom=0.15)  
     plt.show()
 
-# Example usage:
 plot_subjectwise_comparison(scores_df, 'subject_HMM', 'subject_HMM_with_FNN_32')
 
 #%%
@@ -784,8 +534,6 @@ plt.show()
 ### similarly to Figure 5 (Chung and Meyniel, 2025)
 data = pd.read_csv(data_path)
 
-# Pour chaque séquence (75 lignes), détecter les change points et faire la régression demandée
-
 n_tri = length  # nombre de trials par séquence
 window_before = -5
 window_after = 15
@@ -817,7 +565,6 @@ def process_sequence(seq_idx):
                 rows_by_position[rel_pos].append(row)
     return rows_by_position
 
-# Parallelize over all sequences
 all_rows_by_position = Parallel(n_jobs=50)(
     delayed(process_sequence)(seq_idx) for seq_idx in range(n_seq_total)
 )
@@ -879,8 +626,6 @@ for rel_pos, results in parallel_results:
             print(res)
         print("-"*40)
 
-# Save regression results to CSV
-# Save regression results to CSV for each relative position
 all_regression_rows = []
 for rel_pos, results in regression_by_position.items():
     for res in results:
@@ -944,102 +689,7 @@ def plot_regression_coefficients(regression_by_position, models, display_models=
     plt.legend()
     plt.show()
 
-# Example usage:
 plot_regression_coefficients(regression_by_position, models, display_models= None)
 plot_regression_coefficients(regression_by_position, models, display_models= ['estimate', 'subject_GRU_512', 'subject_HMM', 'HMM_with_FNN_512'])
 
 plot_regression_coefficients(regression_by_position, models, display_models= ['estimate', 'subject_HMM', 'subject_HMM_with_FNN_32', 'subject_HMM_with_FNN_512', 'subject_HMM_with_FNN_1024'])
-
-# #%%
-# ### 8 - HMM Parameter Recovery
-# simulated_outcomes = pd.read_csv(data_outcome_level_simulated_path)
-# task = 'ada-prob'
-# model = 'HMM'
-
-# simulated_outcomes = simulated_outcomes[simulated_outcomes['task'] == task]
-# simulated_outcomes = simulated_outcomes[['subject', 'session_idx', 'outcome']]
-
-# subjects = simulated_outcomes['subject'].unique()
-
-# generative_p_c = {subject: np.random.uniform(0.53, 0.57) for subject in subjects}
-
-# fitted_p_c = {subject: None for subject in subjects}
-
-# def fit_subject_p_c(i, subject):
-#     subject_outcomes = simulated_outcomes[simulated_outcomes['subject'] == subject]
-#     predictions = HMM_prediction(generative_p_c[subject], subject_outcomes, task)
-#     sessions_idx = subject_outcomes['session_idx'].unique()
-#     return subject, fit_model(expID, model, i, sessions_idx)[1]
-
-# results = Parallel(n_jobs=n_jobs)(
-#     delayed(fit_subject_p_c)(i, subject) for i, subject in enumerate(subjects)
-# )
-# for subject, fit_val in results:
-#     fitted_p_c[subject] = fit_val
-
-# gen_p_c = np.array([generative_p_c[subject] for subject in subjects])
-# fit_p_c = np.array([fitted_p_c[subject] for subject in subjects])
-
-# mse_p_c = mean_squared_error(gen_p_c, fit_p_c)
-# print(f"MSE between generative_p_c and fitted_p_c: {mse_p_c}")
-
-#%%
-data = pd.read_csv(data_path)
-print(data.columns)
-nan_columns = data.columns[data.isna().any()].tolist()
-if nan_columns:
-    print("Columns with NaN values:", nan_columns)
-else:
-    print("No columns with NaN values.")
-
-for col in nan_columns:
-    nan_indices = data.index[data[col].isna()].tolist()
-    if nan_indices:
-        # Find contiguous ranges of NaN indices
-        ranges = []
-        start = nan_indices[0]
-        prev = nan_indices[0]
-        for idx in nan_indices[1:]:
-            if idx == prev + 1:
-                prev = idx
-            else:
-                ranges.append((start, prev))
-                start = idx
-                prev = idx
-        ranges.append((start, prev))
-        print(f"Column '{col}' NaN ranges (count={len(nan_indices)}):")
-        for r in ranges:
-            if r[0] == r[1]:
-                print(f"  Index {r[0]}")
-            else:
-                print(f"  Indices {r[0]} to {r[1]}")
-    else:
-        print(f"Column '{col}' has no NaN indices.")
-
-# # %%
-# file_old = data_path.replace('.csv', '_mse_evs_per_subject_per_model_old.csv')
-# file_new = file_old.replace('_old.csv', '.csv')
-
-# # Compare specific models between file_old and file_new
-# models_to_check = [
-#     'subject_GRU_32', 'subject_GRU_512', 'subject_GRU_1024', 'subject_GRU_2048', 
-#     'group_GRU_32', 'group_GRU_512', 'group_GRU_1024', 'group_GRU_2048',
-#     'big_group_GRU_32', 'big_group_GRU_512', 'big_group_GRU_1024'
-# ]
-
-# df_old = pd.read_csv(file_old)
-# df_new = pd.read_csv(file_new)
-
-# for model in models_to_check:
-#     rows_old = df_old[df_old['model'] == model].reset_index(drop=True)
-#     rows_new = df_new[df_new['model'] == model].reset_index(drop=True)
-#     same = rows_old.equals(rows_new)
-#     print(f"Model '{model}': {'SAME' if same else 'DIFFERENT'} rows in file_old and file_new")
-#     if not same:
-#         print(f"  Rows in old: {len(rows_old)}, Rows in new: {len(rows_new)}")
-
-# # %%
-# data = pd.read_csv(data_path)
-# print(data.columns)
-
-# # %%

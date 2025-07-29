@@ -5,7 +5,6 @@ and saves the cleaned dataset for further analysis.
 Author: @emilebdn  
 Created date: 2025-04-28
 """
-#%%
 import sys
 
 import os.path as op
@@ -38,5 +37,3 @@ data_outcome_level_preprocessed.to_csv(
     op.join(computed_data_emile_path, \
             f'{today}_data_outcome_level_preprocessed.csv'), index=False
 )
-
-#%%
