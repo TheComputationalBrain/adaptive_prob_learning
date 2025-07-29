@@ -5,7 +5,7 @@ and simulating subjects' behavior in adaptive learning tasks.
 Author: @emilebdn  
 Created date: 2025-04-30
 """
-n_jobs = 15 # Number of parallel jobs for data processing
+n_jobs = 30 # Number of parallel jobs for data processing
 random_state = 42 # Random state
 nb_subjects = 94 # Number of subjects
 

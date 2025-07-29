@@ -34,7 +34,7 @@ from emilebdn.config.variables import (
     num_epochs, 
     batch_size,
 )
-from emilebdn.GRU.GRU_simple_model import SimpleRNN
+from emilebdn.GRU.GRU_simple_model import SimpleGRU, SimpleRNN
 
 today = datetime.now().strftime("%Y%m%d")
 
@@ -119,12 +119,15 @@ def split_sequences_for_cv(sequences, n_splits):
 #%%
 def train_and_evaluate_gru(train_sequences, test_sequences, input_size=input_size, hidden_size=hidden_size,
                            output_size=output_size, learning_rate=learning_rate, num_epochs=num_epochs,
-                           batch_size=batch_size, return_pred=False):
+                           batch_size=batch_size, return_pred=False, RNN=False):
     """
     Train and evaluate a GRU-based RNN for sequence prediction.
     If return_pred is True, returns a list of tuples (output_seq, predicted_seq).
     """
-    model = SimpleRNN(input_size, hidden_size, output_size)
+    if RNN:
+        model = SimpleRNN(input_size, hidden_size, output_size)
+    else:
+        model = SimpleGRU(input_size, hidden_size, output_size)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 

@@ -322,15 +322,24 @@ def fit_model(expID, model, subjidx, sessions):
         
         FM_dat = load_data("FM")
 
-            
-        data = {}
-        data['p_true'] = FM_dat["true_p"][subjidx][sessions]
-        data['outcomes'] = FM_dat["outcome"][subjidx][sessions]
-        data['slider_value'] = FM_dat["sub_est"][subjidx][sessions]
-        data['update_flag'] = FM_dat["update"][subjidx][sessions]
+        if isinstance(subjidx, int):   
+            data = {}
+            data['p_true'] = FM_dat["true_p"][subjidx][sessions]
+            data['outcomes'] = FM_dat["outcome"][subjidx][sessions]
+            data['slider_value'] = FM_dat["sub_est"][subjidx][sessions]
+            data['update_flag'] = FM_dat["update"][subjidx][sessions]
         
+        elif isinstance(subjidx, list):
+            data = {}
+            data['p_true'] = [FM_dat["true_p"][s][sessions] for s in subjidx]
+            data['outcomes'] = [FM_dat["outcome"][s][sessions] for s in subjidx]
+            data['slider_value'] = [FM_dat["sub_est"][s][sessions] for s in subjidx]
+            data['update_flag'] = [FM_dat["update"][s][sessions] for s in subjidx]
+
+            for key in ['p_true', 'outcomes', 'slider_value', 'update_flag']:
+                data[key] = np.concatenate(data[key])
     
-        # concatenate seesions 
+    # concatenate seesions 
     data['p_true'] = np.concatenate(data['p_true'])
     data['outcomes'] = np.concatenate(data['outcomes'])
     data['slider_value'] = np.concatenate(data['slider_value'])
