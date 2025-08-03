@@ -14,7 +14,7 @@ data_outcome_level_path = op.join(root_dir, 'data', 'Foucault_Meyniel_2024', \
 
 computed_data_emile_path = op.normpath(
     op.join(
-        root_dir, '..', '..', 'ebayondenoyer', 'nasShare', \
+        root_dir, '..', '..', '..', 'ebayondenoyer', 'nasShare', \
         'projects', 'protocols', 'AdaptiveProbLearning_ChungMeyniel_2025', \
         'data', 'Foucault_Meyniel_2024', 'computed_data_emile'
     )

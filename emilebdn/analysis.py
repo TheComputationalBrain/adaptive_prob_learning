@@ -15,6 +15,7 @@ Created date: 2025-07-09
 """
 #%%
 ### 0 - Imports and config
+import os
 import sys
 
 import matplotlib as mpl
@@ -176,7 +177,8 @@ print(t_test_df)
 
 #%%
 ### 3 - Plot mean MSE and mean EVS for each model, with error bars for std
-
+agg_df = pd.read_csv(data_path.replace('.csv', '_mse_mean_evs_vs_estimate.csv'))
+    
 def plot_mse_evs_barplot(agg_df, sort_by=None, diff_with_reference_model=None, show_model_legend=True):
     """
     Plot Mean MSE (bar) and Mean EVS (point ± std) for each model.
@@ -191,12 +193,6 @@ def plot_mse_evs_barplot(agg_df, sort_by=None, diff_with_reference_model=None, s
     Returns:
         pd.DataFrame: DataFrame mapping model index `i` to `modelname_i`
     """
-    import matplotlib.pyplot as plt
-    import matplotlib.patches as mpatches
-    import matplotlib as mpl
-    import seaborn as sns
-    import pandas as pd
-
     mpl.rcParams.update({
         'font.family': 'sans-serif',
         'font.sans-serif': ['DejaVu Sans'],
@@ -304,13 +300,27 @@ def plot_mse_evs_barplot(agg_df, sort_by=None, diff_with_reference_model=None, s
 
     plt.show()
 
-    # Return mapping DataFrame
-    return pd.DataFrame({'Index': model_numbers, 'Model name': model_names})
+    plt.savefig(
+        data_path.replace('.csv', f'_models_comparison_sort_by_{sort_by}_diff_with_{diff_with_reference_model}.png'),
+    )
+    print(f"Saved plot to {data_path.replace('.csv', f'_models_comparison_sort_by_{sort_by}_diff_with_{diff_with_reference_model}.png')}")
 
-plot_mse_evs_barplot(agg_df, sort_by='evs', diff_with_reference_model=reference_model)
+    pd.DataFrame({'Index': model_numbers, 'Model name': model_names}).to_csv(
+        data_path.replace('.csv', f'_models_comparison_sort_by_{sort_by}_diff_with_{diff_with_reference_model}.csv'),
+        index=False
+    )
+    print(f"Model mapping saved to CSV: {data_path.replace('.csv', f'_models_comparison_sort_by_{sort_by}_diff_with_{diff_with_reference_model}.csv')}")
+
+plot_mse_evs_barplot(agg_df, sort_by='evs', diff_with_reference_model=reference_model, show_model_legend=False)
+plot_mse_evs_barplot(agg_df, sort_by='mse', diff_with_reference_model=reference_model, show_model_legend=False)
+plot_mse_evs_barplot(agg_df, sort_by=None, diff_with_reference_model=reference_model, show_model_legend=False)
+plot_mse_evs_barplot(agg_df, sort_by='evs', diff_with_reference_model=None, show_model_legend=False)
+plot_mse_evs_barplot(agg_df, sort_by='mse', diff_with_reference_model=None, show_model_legend=False)
+plot_mse_evs_barplot(agg_df, sort_by=None, diff_with_reference_model=None, show_model_legend=False)
 
 #%%
 ### 4 - Plot MSE and EVS for each subject and a chosen model, with bars for mean ± std
+scores_df = pd.read_csv(data_path.replace('.csv', '_mse_evs_per_subject_per_model.csv'))
 
 def plot_subjectwise_comparison(scores_df, model1, model2):
     """
@@ -321,7 +331,7 @@ def plot_subjectwise_comparison(scores_df, model1, model2):
     """
     mpl.rcParams.update({
         'font.family': 'sans-serif',
-        'font.sans-serif': ['DejaVu Sans'],  
+        'font.sans-serif': ['DejaVu Sans'],
         'font.size': 12,
     })
 
@@ -330,25 +340,20 @@ def plot_subjectwise_comparison(scores_df, model1, model2):
 
     # Set beautiful seaborn style
     sns.set(style="whitegrid")
-
     mse_color = sns.color_palette("Blues", n_colors=3)[2]
     evs_color = sns.color_palette("Oranges", n_colors=3)[2]
     bar_colors = [mse_color, evs_color]
 
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-
-    for idx, metric in enumerate(metrics):
+    for metric in metrics:
+        fig, ax = plt.subplots(figsize=(8, 6))
         df1 = scores_df[scores_df['model'] == model1].sort_values('subject')
         df2 = scores_df[scores_df['model'] == model2].sort_values('subject')
-
         subjects = df1['subject'].values
         vals1 = df1[metric].values
         vals2 = df2[metric].values
-
         mean1, std1 = np.mean(vals1), np.std(vals1)
         mean2, std2 = np.mean(vals2), np.std(vals2)
 
-        ax = axes[idx]
         x = np.array([0, 1])
 
         # Draw thick horizontal bars for mean ± std
@@ -374,24 +379,51 @@ def plot_subjectwise_comparison(scores_df, model1, model2):
             ax.set_ylim(-1, 1)
             ax.axhline(0, color='black', linestyle=':', linewidth=1, zorder=1)
 
-    # Add a custom legend below the plots
-    mean_dot = Line2D([0], [0], marker='o', color='w', label='Mean value',
-                      markerfacecolor='gray', markeredgecolor='black', markersize=12)
-    std_bar = Line2D([0], [0], color='gray', linewidth=8, alpha=0.3, label='± 1 std. range')
-    subject_line = Line2D([0], [0], color='gray', linewidth=1, alpha=0.4, label='Subject values')
+        # Add a custom legend below the plot
+        mean_dot = Line2D([0], [0], marker='o', color='w', label='Mean value',
+                          markerfacecolor='gray', markeredgecolor='black', markersize=12)
+        std_bar = Line2D([0], [0], color='gray', linewidth=8, alpha=0.3, label='± 1 std. range')
+        subject_line = Line2D([0], [0], color='gray', linewidth=1, alpha=0.4, label='Subject values')
+        fig.legend(handles=[mean_dot, std_bar, subject_line],
+                   loc='lower center', ncol=3, frameon=False, fontsize=12, bbox_to_anchor=(0.5, -0.15))
 
-    fig.legend(handles=[mean_dot, std_bar, subject_line], 
-               loc='lower center', ncol=3, frameon=False, fontsize=12, bbox_to_anchor=(0.5, -0.05))
+        plt.tight_layout()
+        plt.subplots_adjust(bottom=0.2)
 
-    plt.tight_layout()
-    plt.subplots_adjust(bottom=0.15)  
-    plt.show()
+        # Define the save path
+        save_dir = op.join(op.dirname(data_path), '20250515_data_outcome_level_preprocessed_ada-prob_with_predictions_subjectwise_models_comparison')
+        os.makedirs(save_dir, exist_ok=True)  # Create the directory if it doesn't exist
+        save_path = op.join(save_dir, f'20250515_data_outcome_level_preprocessed_ada-prob_with_predictions_{model1}_vs_{model2}_subjectwise_comparison_{metric}.png')
 
-plot_subjectwise_comparison(scores_df, 'subject_HMM', 'subject_HMM_with_FNN_32')
+        # Save the figure
+        plt.savefig(save_path)
+        print(f"Plot saved to {save_path}")
+
+        plt.show()
+        plt.close()
+
+# Define the specific pairs you want to compare
+specific_pairs = [
+    ('subject_HMM', model) for model in models if model != 'subject_HMM'
+] + [
+    ('group_HMM', model) for model in models if model.startswith('group_RNN_')
+] + [
+    ('group_HMM', model) for model in models if model.startswith('group_GRU_')
+] + [
+    ('big_group_HMM', model) for model in models if model.startswith('big_group_RNN_')
+] + [
+    ('big_group_HMM', model) for model in models if model.startswith('big_group_GRU_')
+]
+
+# Iterate over the specific pairs and plot comparisons
+for model1, model2 in specific_pairs:
+    print(f"Plotting comparison between {model1} and {model2}")
+    # plot_subjectwise_comparison(scores_df, model1, model2)
 
 #%%
 ### 5 - Compare the first prediction of each sequence for each model, conditioning
 ### or without conditionning on outcome == 0 (yellow) or outcome == 1 (blue)
+data = pd.read_csv(data_path)
 
 # Extract only the first row of each sequence
 first_rows = data.iloc[::n_tri].copy()
@@ -458,75 +490,135 @@ regression_df = pd.DataFrame(regression_results)
 print(regression_df)
 regression_df.to_csv(
     data_path.replace(
-        '.csv', '_regression_vs_hidden_parameter_results.csv'
+        '.csv', f'_regression_vs_{reference}_results.csv'
     ),
     index=False
 )
 
-# Plotting (sampled, to avoid memory issues)
-sample_size = 200 
-n_cols = 2
-n_rows = int(np.ceil(len(models) / n_cols))
-fig, axes = plt.subplots(n_rows, n_cols, figsize=(7*n_cols, 7*n_rows))  # Make figure larger for square axes
-axes = axes.flatten()
+# # Plotting (sampled, to avoid memory issues)
+# sample_size = 200 
+# n_cols = 2
+# n_rows = int(np.ceil(len(models) / n_cols))
+# fig, axes = plt.subplots(n_rows, n_cols, figsize=(7*n_cols, 7*n_rows))  # Make figure larger for square axes
+# axes = axes.flatten()
 
-for idx, model in enumerate(models):
-    ax = axes[idx]
-    # Plot model vs reference as before
-    if model == reference:
-        df = data[[reference]]
-        if len(df) > sample_size:
-            df_sample = df.sample(n=sample_size, random_state=random_state)
+# for idx, model in enumerate(models):
+#     ax = axes[idx]
+#     # Plot model vs reference as before
+#     if model == reference:
+#         df = data[[reference]]
+#         if len(df) > sample_size:
+#             df_sample = df.sample(n=sample_size, random_state=random_state)
+#         else:
+#             df_sample = df
+#         ax.scatter(df_sample[reference], df_sample[reference], alpha=0.5)
+#         ax.plot(df_sample[reference], df_sample[reference], color='red', label='y=x')
+#         ax.set_title(f'{reference} vs {reference}\n$y = x$')
+#         ax.set_xlabel(reference)
+#         ax.set_ylabel(reference)
+#         ax.set_aspect('equal', adjustable='datalim')
+#         # Make axes square
+#         lims = [
+#             np.min([ax.get_xlim(), ax.get_ylim()]),
+#             np.max([ax.get_xlim(), ax.get_ylim()]),
+#         ]
+#         ax.set_xlim(lims)
+#         ax.set_ylim(lims)
+#         continue
+#     df = data[[reference, model]]
+#     if len(df) > sample_size:
+#         df_sample = df.sample(n=sample_size, random_state=random_state)
+#     else:
+#         df_sample = df
+#     reg_row = regression_df[regression_df['model'] == model]
+#     slope = reg_row['slope'].values[0]
+#     intercept = reg_row['intercept'].values[0]
+#     sns.regplot(
+#         data=df_sample,
+#         x=reference,
+#         y=model,
+#         scatter=True,
+#         line_kws={'color': 'red'},
+#         ax=ax
+#     )
+#     ax.set_title(f'{model} vs {reference}\n$y = {slope:.3f}x + {intercept:.3f}$')
+#     ax.set_xlabel(reference)
+#     ax.set_ylabel(model)
+#     ax.set_aspect('equal', adjustable='datalim')
+#     # Make axes square
+#     lims = [
+#         np.min([ax.get_xlim(), ax.get_ylim()]),
+#         np.max([ax.get_xlim(), ax.get_ylim()]),
+#     ]
+#     ax.set_xlim(lims)
+#     ax.set_ylim(lims)
+
+# # Hide unused subplots
+# for j in range(idx + 1, len(axes)):
+#     fig.delaxes(axes[j])
+
+# plt.tight_layout()
+# plt.show()
+# plt.savefig(
+#     data_path.replace('.csv', f'_regression_vs_{reference}_results.png'),
+#     bbox_inches='tight'
+# )
+
+# Plotting
+sample_size = 200
+random_state = 42
+
+# Iterate over pairs of models
+for i in range(0, len(models), 2):
+    fig, axes = plt.subplots(1, 2, figsize=(14, 7))  # Create a figure with two subplots
+    for j, model in enumerate(models[i:i+2]):
+        ax = axes[j]
+        if model == reference:
+            df = data[[reference]]
+            if len(df) > sample_size:
+                df_sample = df.sample(n=sample_size, random_state=random_state)
+            else:
+                df_sample = df
+            ax.scatter(df_sample[reference], df_sample[reference], alpha=0.5)
+            ax.plot(df_sample[reference], df_sample[reference], color='red', label='y=x')
+            ax.set_title(f'{reference} vs {reference}\n$y = x$')
+            ax.set_xlabel(reference)
+            ax.set_ylabel(reference)
         else:
-            df_sample = df
-        ax.scatter(df_sample[reference], df_sample[reference], alpha=0.5)
-        ax.plot(df_sample[reference], df_sample[reference], color='red', label='y=x')
-        ax.set_title(f'{reference} vs {reference}\n$y = x$')
-        ax.set_xlabel(reference)
-        ax.set_ylabel(reference)
+            df = data[[reference, model]]
+            if len(df) > sample_size:
+                df_sample = df.sample(n=sample_size, random_state=random_state)
+            else:
+                df_sample = df
+            reg_row = regression_df[regression_df['model'] == model]
+            slope = reg_row['slope'].values[0]
+            intercept = reg_row['intercept'].values[0]
+            sns.regplot(
+                data=df_sample,
+                x=reference,
+                y=model,
+                scatter=True,
+                line_kws={'color': 'red'},
+                ax=ax
+            )
+            ax.set_title(f'{model} vs {reference}\n$y = {slope:.3f}x + {intercept:.3f}$')
+            ax.set_xlabel(reference)
+            ax.set_ylabel(model)
+
         ax.set_aspect('equal', adjustable='datalim')
-        # Make axes square
         lims = [
             np.min([ax.get_xlim(), ax.get_ylim()]),
             np.max([ax.get_xlim(), ax.get_ylim()]),
         ]
         ax.set_xlim(lims)
         ax.set_ylim(lims)
-        continue
-    df = data[[reference, model]]
-    if len(df) > sample_size:
-        df_sample = df.sample(n=sample_size, random_state=random_state)
-    else:
-        df_sample = df
-    reg_row = regression_df[regression_df['model'] == model]
-    slope = reg_row['slope'].values[0]
-    intercept = reg_row['intercept'].values[0]
-    sns.regplot(
-        data=df_sample,
-        x=reference,
-        y=model,
-        scatter=True,
-        line_kws={'color': 'red'},
-        ax=ax
+
+    plt.tight_layout()
+    plt.show()
+    plt.savefig(
+        data_path.replace('.csv', f'_regression_vs_{reference}_results_{i//2}.png'),
+        bbox_inches='tight'
     )
-    ax.set_title(f'{model} vs {reference}\n$y = {slope:.3f}x + {intercept:.3f}$')
-    ax.set_xlabel(reference)
-    ax.set_ylabel(model)
-    ax.set_aspect('equal', adjustable='datalim')
-    # Make axes square
-    lims = [
-        np.min([ax.get_xlim(), ax.get_ylim()]),
-        np.max([ax.get_xlim(), ax.get_ylim()]),
-    ]
-    ax.set_xlim(lims)
-    ax.set_ylim(lims)
-
-# Hide unused subplots
-for j in range(idx + 1, len(axes)):
-    fig.delaxes(axes[j])
-
-plt.tight_layout()
-plt.show()
 
 #%%
 ### 7 - Compute linear regression to obtain weights attributed to hidden parameters before
@@ -642,7 +734,7 @@ regression_by_position_df.to_csv(
 
 def plot_regression_coefficients(regression_by_position, models, display_models=None):
     """
-    Plot regression coefficients 'a' (dashed) and 'b' (solid) vs relative position for each model.
+    Plot regression coefficients 'a' (hidden_param_bef, dashed) and 'b' (hidden_param_aft, solid) vs relative position for each model.
 
     Args:
         regression_by_position: dict mapping relative position to list of regression result dicts.
@@ -689,7 +781,29 @@ def plot_regression_coefficients(regression_by_position, models, display_models=
     plt.legend()
     plt.show()
 
-plot_regression_coefficients(regression_by_position, models, display_models= None)
-plot_regression_coefficients(regression_by_position, models, display_models= ['estimate', 'subject_GRU_512', 'subject_HMM', 'HMM_with_FNN_512'])
+    if len(display_models) <= 3:
+        models_prefix = '_vs_'.join(display_models)
+    else:
+        models_prefix = '_vs_'.join(display_models[:3]) + '_and-so-on'
 
+    # Utiliser models_prefix dans le chemin de fichier
+    file_path = data_outcome_level_preprocessed_path.replace(
+        '.csv', f'_ada-prob_with_predictions_figure_5_results_{models_prefix}.png'
+    )
+
+    plt.savefig(
+        file_path,
+        bbox_inches='tight'
+    )
+
+plot_regression_coefficients(regression_by_position, models, display_models=['estimate', 'subject_HMM', 'optimal_HMM', 'group_HMM', 'big_group_HMM'])
+plot_regression_coefficients(regression_by_position, models, display_models= ['estimate', 'subject_HMM', 'subject_RNN_2048', 'subject_GRU_2048'])
+plot_regression_coefficients(regression_by_position, models, display_models= ['estimate', 'group_HMM', 'group_RNN_2048', 'group_GRU_2048'])
+plot_regression_coefficients(regression_by_position, models, display_models= ['estimate', 'big_group_HMM', 'big_group_RNN_1024', 'big_group_GRU_1024'])
+plot_regression_coefficients(regression_by_position, models, display_models= ['estimate', 'big_group_HMM', 'big_group_RNN_512', 'big_group_GRU_512'])
+plot_regression_coefficients(regression_by_position, models, display_models= ['estimate', 'big_group_HMM', 'big_group_RNN_32', 'big_group_GRU_32'])
 plot_regression_coefficients(regression_by_position, models, display_models= ['estimate', 'subject_HMM', 'subject_HMM_with_FNN_32', 'subject_HMM_with_FNN_512', 'subject_HMM_with_FNN_1024'])
+plot_regression_coefficients(regression_by_position, models, display_models= ['estimate', 'group_HMM', 'big_group_HMM_with_FNN_4', 'big_group_HMM_with_FNN_8', 'big_group_HMM_with_FNN_16'])
+plot_regression_coefficients(regression_by_position, models, display_models= ['estimate', 'big_group_HMM', 'big_group_HMM_with_FNN_32', 'big_group_HMM_with_FNN_512', 'big_group_HMM_with_FNN_1024'])
+
+# %%
