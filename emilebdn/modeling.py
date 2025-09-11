@@ -224,7 +224,7 @@ for hidden_size in [32, 512, 1024, 2048]:
     data.to_csv(data_path, index=False)
 
 #%%
-### 4 - Group-wise GRU Predictions
+### 4 - Group-wise GRU or Vanilla RNN Predictions
 ### with (for train sequences) all sequences
 ### except the sequences with the same outcome as the test sequences, 
 ### except the sequences with the same subject than the test sequences' one
